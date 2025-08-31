@@ -3,12 +3,16 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
+import { AuthGuardsModule } from './auth/auth-guards.module';
 import { APP_GUARD } from '@nestjs/core';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { ApiKeyAuthGuard } from './auth/api-key-auth.guard';
 import { ConfigModule } from '@nestjs/config';
 import { LifeCyclesModule } from './life-cycles/life-cycles.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { PersonsModule } from './persons/persons.module';
+import { VolunteersModule } from './volunteers/volunteers.module';
+import { CellsModule } from './cells/cells.module';
+import { MinistriesModule } from './ministries/ministries.module';
 import * as process from 'process';
 
 @Module({
@@ -26,16 +30,20 @@ import * as process from 'process';
       autoLoadEntities: true,
     }),
     AuthModule,
+    AuthGuardsModule,
     LifeCyclesModule,
     MilestonesModule,
-    PersonsModule
+    PersonsModule,
+    VolunteersModule,
+    CellsModule,
+    MinistriesModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard,
+      useClass: ApiKeyAuthGuard,
     },
   ],
 })

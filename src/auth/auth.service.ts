@@ -69,7 +69,7 @@ export class AuthService {
       if (existingUser) {
         throw new UnauthorizedException('Email already exists');
       }
-
+      
       const hashedPassword = await bcrypt.hash(password, 10);
       const user = this.userRepository.create({
         name,

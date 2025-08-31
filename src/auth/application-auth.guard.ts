@@ -7,6 +7,13 @@ export class ApplicationAuthGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    
+    // Se a request foi autenticada via API Key, permite o acesso
+    if (request.headers['x-api-key']) {
+      return true;
+    }
+
     const applicationId = this.reflector.getAllAndOverride<string>(APPLICATION_ID_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -16,7 +23,6 @@ export class ApplicationAuthGuard implements CanActivate {
       return true; // No application ID required
     }
 
-    const request = context.switchToHttp().getRequest();
     const user = request.user;
 
     if (!user?.applications?.[applicationId]?.length) {
