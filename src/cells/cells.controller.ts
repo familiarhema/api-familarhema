@@ -3,9 +3,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApplicationAuthGuard } from '../auth/application-auth.guard';
 import { CellsService } from './cells.service';
 import { CreateCellDto, CellBasicResponseDto, CellDetailedResponseDto } from './dto/create-cell.dto';
+import { AllowApiKey } from 'src/auth/api-key-auth.decorator';
 
 @Controller('cells')
-@UseGuards(JwtAuthGuard, ApplicationAuthGuard)
 export class CellsController {
   constructor(private readonly cellsService: CellsService) {}
 
@@ -14,6 +14,7 @@ export class CellsController {
     return this.cellsService.create(createCellDto);
   }
 
+  @AllowApiKey()
   @Get()
   async getAll(): Promise<CellBasicResponseDto[]> {
     return this.cellsService.getAll();

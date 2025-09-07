@@ -1,11 +1,13 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, All } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApplicationAuthGuard } from '../auth/application-auth.guard';
 import { VolunteersService } from './volunteers.service';
 import { ValidateVolunteerDto, ValidateVolunteerResponseDto } from './dto/validate-volunteer.dto';
+import { AllowApiKey } from 'src/auth/api-key-auth.decorator';
 
 @Controller('volunteers')
-@UseGuards(JwtAuthGuard, ApplicationAuthGuard)
+@UseGuards(ApplicationAuthGuard)
+@AllowApiKey()
 export class VolunteersController {
   constructor(private readonly volunteersService: VolunteersService) {}
 
