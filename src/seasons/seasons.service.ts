@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { SeasonFilterDto } from './dto/season-filter.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Season } from '../entities/season.entity';
@@ -11,6 +12,25 @@ import { InscreverSeSeasonDto } from './dto/inscrever-se-season.dto';
 
 @Injectable()
 export class SeasonsService {
+  async findAll(filters: SeasonFilterDto) {
+    const queryBuilder = this.seasonRepository
+      .createQueryBuilder('season');
+
+    if (filters.name) {
+      queryBuilder.andWhere('LOWER(season.name) LIKE LOWER(:name)', {
+        name: `%${filters.name}%`
+      });
+    }
+
+    if (filters.active !== undefined) {
+      queryBuilder.andWhere('season.active = :active', {
+        active: filters.active
+      });
+    }
+
+    return queryBuilder.getMany();
+  }
+
   constructor(
     @InjectRepository(Season)
     private seasonRepository: Repository<Season>,

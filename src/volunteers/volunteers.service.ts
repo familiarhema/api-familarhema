@@ -1,15 +1,18 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull, LessThanOrEqual, MoreThanOrEqual, In } from 'typeorm';
+import { Repository, IsNull, LessThanOrEqual, MoreThanOrEqual, In, Like } from 'typeorm';
 import { Volunteer } from '../entities/volunteer.entity';
 import { PCSIntegrationService } from '../integrations/pcs/pcs-integration.service';
 import {
   ValidateVolunteerDto,
   ValidateVolunteerResponseDto,
 } from './dto/validate-volunteer.dto';
+import { Ministry } from '../entities/ministry.entity';
 import { Season } from '../entities/season.entity';
 import { VolunteerMinistrySeason } from '../entities/volunteer-ministry-season.entity';
 import { VolunteerHistorySeason } from '../entities/volunteer-history-season.entity';
+import { VolunteerFilterDto } from './dto/volunteer-filter.dto';
+import { VolunteerListResponseDto, VolunteerListItemDto } from './dto/volunteer-list-response.dto';
 
 @Injectable()
 export class VolunteersService {
@@ -210,5 +213,87 @@ export class VolunteersService {
       },
       message: 'Novo Voluntario',
     };
+  }
+
+  async listVolunteers(seasonId: string, filters: VolunteerFilterDto): Promise<VolunteerListResponseDto> {
+    const pageSize = 100;
+    const skip = (filters.page - 1) * pageSize;
+
+    const query = this.volunteersRepository
+      .createQueryBuilder('v')
+      .leftJoin('volunteer_history_season', 'vhs', 'vhs.volunteer_id = v.id AND vhs.season_id = :seasonId', { seasonId })
+      .leftJoin('cells', 'c', 'vhs.cell_id = c.id')
+      .leftJoin('volunteer_ministry_season', 'vms', 'vms.volunteer_id = v.id AND vms.season_id = :seasonId', { seasonId })
+      .leftJoin('ministries', 'm', 'vms.ministry_id = m.id')
+      .select([
+        'v.id', 'v.name', 'v.email', 'v.phone', 'v.status', 'v.registration_date',
+        'vhs.id as history_id', 'vhs.phone as new_phone', 'vhs.email as new_email',
+        'vhs.cell_name', 'c.name as cell_name_from_id',
+        'vms.id as ministry_season_id', 'vms.status as ministry_status',
+        'm.id as ministry_id', 'm.name as ministry_name'
+      ]);
+
+    if (filters.nome) {
+      query.andWhere('v.name ILIKE :name', { name: `%${filters.nome}%` });
+    }
+
+    if (filters.email) {
+      query.andWhere('v.email ILIKE :email', { email: `%${filters.email}%` });
+    }
+
+    if (filters.ministerioId) {
+      query.andWhere('m.id = :ministerioId', { ministerioId: filters.ministerioId });
+    }
+
+    const [volunteers, total] = await Promise.all([
+      query.limit(pageSize).offset(skip).getRawMany(),
+      query.getCount()
+    ]);
+
+    const groupedVolunteers = this.groupVolunteersData(volunteers);
+    
+    return {
+      items: groupedVolunteers,
+      total,
+      page: filters.page,
+      totalPages: Math.ceil(total / pageSize)
+    };
+  }
+
+  private groupVolunteersData(rawData: any[]): VolunteerListItemDto[] {
+    const volunteersMap = new Map<string, VolunteerListItemDto>();
+
+    for (const row of rawData) {
+      if (!volunteersMap.has(row.v_id)) {
+        volunteersMap.set(row.v_id, {
+          id: row.v_id,
+          name: row.v_name,
+          email: row.v_email,
+          phone: row.v_phone,
+          status: row.v_status,
+          registration_date: row.v_registration_date,
+          new_phone: row.v_phone !== row.new_phone ? row.new_phone : 'Não mudou número',
+          new_email: row.v_email !== row.new_email ? row.new_email : 'Não mudou email',
+          cell_name: row.cell_name_from_id || row.cell_name || null,
+          new_cell: !row.cell_name_from_id && row.cell_name ? true : false,
+          history_id: row.history_id,
+          new_ministeries: []
+        });
+      }
+
+      if (row.ministry_id) {
+        const volunteer = volunteersMap.get(row.v_id);
+        if (!volunteer.new_ministeries.some(m => m.new_id === row.ministry_season_id)) {
+          volunteer.new_ministeries.push({
+            new_id: row.ministry_season_id,
+            status: row.ministry_status,
+            id: row.ministry_id,
+            name: row.ministry_name
+          });
+        }
+      }
+    }
+
+    return Array.from(volunteersMap.values());
   }
 }
