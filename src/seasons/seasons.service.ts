@@ -67,9 +67,9 @@ export class SeasonsService {
       where: { id: dto.celula.codigo }
     });
 
-    if (!cell) {
-      throw new NotFoundException('Célula não encontrada');
-    }
+    // if (!cell) {
+    //   throw new NotFoundException('Célula não encontrada');
+    // }
 
     // 5. Verificar se os ministérios existem
     const ministerios = await this.ministryRepository.find({
@@ -93,7 +93,8 @@ export class SeasonsService {
       season,
       cell,
       email: dto.email,
-      phone: dto.celular
+      phone: dto.celular,
+      cellName: cell ? null : dto.celula.nome
     });
 
     await this.volunteerHistorySeasonRepository.save(historySeason);
@@ -117,8 +118,8 @@ export class SeasonsService {
         volunteerId: volunteer.id,
         ministerios: ministerios.map(m => ({ id: m.id, name: m.name })),
         celula: {
-          id: cell.id,
-          nome: cell.name
+          id: cell?.id || '00000000-0000-0000-0000-000000000000',
+          nome: cell ? cell.name : dto.celula.nome
         }
       }
     };

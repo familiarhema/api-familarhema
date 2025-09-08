@@ -31,4 +31,7 @@ export class Cell {
 
   @CreateDateColumn()
   created_at: Date;
+
+  @Column({ type: 'boolean', default: true })
+  active: boolean;
 }

@@ -20,6 +20,12 @@ export class CellsController {
     return this.cellsService.getAll();
   }
 
+  @AllowApiKey()
+  @Get('ativos')
+  async getAtivos(): Promise<CellBasicResponseDto[]> {
+    return this.cellsService.getAtivos();
+  }
+
   @Get(':id')
   async getCellPorId(@Param('id') id: string): Promise<CellDetailedResponseDto> {
     return this.cellsService.getCellPorId(id);

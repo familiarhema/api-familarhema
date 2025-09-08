@@ -25,6 +25,12 @@ export class VolunteersService {
     private pcsIntegrationService: PCSIntegrationService,
   ) {}
 
+  normalizePhoneNumber(phone: string | null | undefined): string | null {
+    if (!phone) return null; // trata null ou undefined
+    return phone.replace(/\D/g, ""); // remove tudo que não for número
+  }
+
+
   async validateVolunteer(
     data: ValidateVolunteerDto,
   ): Promise<any> {
@@ -150,7 +156,7 @@ export class VolunteersService {
         volunteer = this.volunteersRepository.create({
           name: pcsUser.name,
           email: pcsUser.email,
-          phone: pcsUser.phone_number,
+          phone: this.normalizePhoneNumber(pcsUser.phone_number),
           birth_date: new Date(pcsUser.birthdate),
           photo: pcsUser.avatar,
           registration_date: new Date(pcsUser.created_at),
@@ -161,7 +167,7 @@ export class VolunteersService {
         console.log('Atualizando voluntário existente com dados da PCS.');
         volunteer.name = pcsUser.name;
         volunteer.email = pcsUser.email;
-        volunteer.phone = pcsUser.phone_number;
+        volunteer.phone = this.normalizePhoneNumber(pcsUser.phone_number);
         volunteer.birth_date = new Date(pcsUser.birthdate);
         volunteer.photo = pcsUser.avatar;
         volunteer.registration_date = new Date(pcsUser.created_at);
@@ -176,7 +182,7 @@ export class VolunteersService {
       console.log('Ministérios encontrados na PCS:', ministerios);
       return {
         data: {
-          ministerios: ministerios.ministerios,
+          ministerios: ministerios.ministerios.map(m => ({ id: Number(m.id), name: m.name })) ,
           cell: null,
           nome: volunteer.name,
           volunteerId: volunteer.id,

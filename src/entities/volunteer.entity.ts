@@ -23,7 +23,7 @@ export class Volunteer {
   @Column({ nullable: true })
   photo: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'date', nullable: true })
   birth_date: Date;
 
   @Column({ name: 'person_id', type: 'integer', nullable: true })

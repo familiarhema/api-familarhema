@@ -27,6 +27,7 @@ import { SeasonsModule } from './seasons/seasons.module';
       password: process.env.POSTGRES_PASSWORD,
       database: process.env.POSTGRES_DB,
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
+      ssl: process.env.ENVIRONMENT == "PROD" ? { rejectUnauthorized: false } : false,
       synchronize: true,
       autoLoadEntities: true,
     }),

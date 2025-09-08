@@ -50,6 +50,18 @@ export class CellsService {
     }));
   }
 
+  async getAtivos(): Promise<CellBasicResponseDto[]> {
+    const cells = await this.cellsRepository.find({
+      where: { active: true },
+      select: ['id', 'name'],
+    });
+
+    return cells.map(cell => ({
+      id: cell.id,
+      name: cell.name,
+    }));
+  }
+
   async getCellPorId(id: string): Promise<CellDetailedResponseDto> {
     const cell = await this.cellsRepository.findOne({
       where: { id },

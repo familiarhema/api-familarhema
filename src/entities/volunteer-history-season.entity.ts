@@ -22,7 +22,10 @@ export class VolunteerHistorySeason {
   @Column({ length: 150 })
   email: string;
 
-  @ManyToOne(() => Cell)
+  @ManyToOne(() => Cell, { nullable: true })
   @JoinColumn({ name: 'cell_id' })
   cell: Cell;
+
+  @Column({ length: 100, nullable: true, name: 'cell_name' })
+  cellName: string;
 }
