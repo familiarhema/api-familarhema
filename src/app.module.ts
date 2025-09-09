@@ -15,6 +15,7 @@ import { CellsModule } from './cells/cells.module';
 import { MinistriesModule } from './ministries/ministries.module';
 import * as process from 'process';
 import { SeasonsModule } from './seasons/seasons.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -39,7 +40,8 @@ import { SeasonsModule } from './seasons/seasons.module';
     VolunteersModule,
     CellsModule,
     MinistriesModule,
-    SeasonsModule
+    SeasonsModule, 
+    UsersModule
   ],
   controllers: [AppController],
   providers: [

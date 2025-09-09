@@ -23,6 +23,10 @@ export class AuthService {
       if (!user) {
         return null;
       }
+
+      if (user.blocked || !user.active) {
+        return null;
+      }
       
       const isPasswordValid = await bcrypt.compare(password, user.password_hash);
       
@@ -51,6 +55,7 @@ export class AuthService {
 
     const payload = {
       email: user.email,
+      name: user.name,
       sub: user.id,
       role: userWithRole.role ? {
         id: userWithRole.role.id,
@@ -75,6 +80,7 @@ export class AuthService {
         name,
         email,
         password_hash: hashedPassword,
+        role: { id: 'daf9e273-8781-45d1-b1ea-00a76b3d1799' }
       });
 
       const savedUser = await this.userRepository.save(user);
@@ -84,7 +90,9 @@ export class AuthService {
       const payload = {
         email: result.email,
         sub: result.id,
-        role: null
+        role: {
+          id: 'daf9e273-8781-45d1-b1ea-00a76b3d1799'
+        }
       };
 
       return {

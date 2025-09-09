@@ -19,6 +19,12 @@ export class User {
   @JoinColumn({ name: 'role_id' })
   role: Role;
 
+  @Column({ default: true })
+  active: boolean;
+
+  @Column({ default: true })
+  blocked: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 }
