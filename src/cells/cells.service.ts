@@ -47,6 +47,7 @@ export class CellsService {
     return cells.map(cell => ({
       id: cell.id,
       name: cell.name,
+      
     }));
   }
 
@@ -54,6 +55,7 @@ export class CellsService {
     const cells = await this.cellsRepository.find({
       where: { active: true },
       select: ['id', 'name'],
+      order: { name: 'ASC' },
     });
 
     return cells.map(cell => ({

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, LessThanOrEqual, MoreThanOrEqual, In, Like } from 'typeorm';
 import { Volunteer } from '../entities/volunteer.entity';
@@ -16,6 +16,7 @@ import { VolunteerListResponseDto, VolunteerListItemDto } from './dto/volunteer-
 
 @Injectable()
 export class VolunteersService {
+  private readonly logger = new Logger(VolunteersService.name);
   constructor(
     @InjectRepository(Volunteer)
     private volunteersRepository: Repository<Volunteer>,
@@ -37,32 +38,37 @@ export class VolunteersService {
   async validateVolunteer(
     data: ValidateVolunteerDto,
   ): Promise<any> {
-    console.log('Iniciando validação de voluntário:', data);
+    this.logger.debug('Iniciando validação de voluntário: ' + JSON.stringify(data));
     // 1. Buscar temporada ativa
     const today = new Date();
-    console.log('Buscando temporada ativa para data:', today);
+    this.logger.debug('Buscando temporada ativa para data: ' + today);
     const season = await this.seasonRepository.findOne({
       where: [
-        { dataInicio: LessThanOrEqual(today), dataFim: MoreThanOrEqual(today) },
+        { dataInicio: LessThanOrEqual(today), dataFim: MoreThanOrEqual(today), active : true },
       ],
       order: { dataInicio: 'DESC' },
     });
-    console.log('Season encontrada:', season);
+    this.logger.debug('Season encontrada: ' + JSON.stringify(season));
     if (!season) {
-      console.log('Nenhuma temporada ativa encontrada.');
+      this.logger.warn('Nenhuma temporada ativa encontrada.');
       throw new NotFoundException('Temporada não disponivel para cadastro');
     }
 
     // 2. Buscar voluntário por email ou telefone
-    console.log('Buscando voluntário por email ou telefone:', data.email, data.telefone);
-    const existingVolunteer = await this.volunteersRepository.findOne({
-      where: [{ email: data.email }, { phone: data.telefone }],
-    });
-    console.log('Voluntário encontrado:', existingVolunteer);
+    this.logger.debug('Buscando voluntário por email ou telefone: ' + data.email + ', ' + data.telefone);
+    const existingVolunteer = await this.volunteersRepository
+                                        .createQueryBuilder('volunteer')
+                                        .where('volunteer.email = :email', { email: data.email })
+                                        .orWhere('volunteer.phone LIKE :phone', { phone: `%${data.telefone}` })
+                                        .getOne();
+    // const existingVolunteer = await this.volunteersRepository.findOne({
+    //   where: [{ email: data.email }, { phone: data.telefone }],
+    // });
+    this.logger.debug('Voluntário encontrado: ' + JSON.stringify(existingVolunteer));
 
     if (existingVolunteer) {
       // Verificar se já está inscrito na temporada através do volunteer_history_season
-      console.log('Verificando inscrição na temporada através do volunteer_history_season');
+      this.logger.debug('Verificando inscrição na temporada através do volunteer_history_season');
       const historicoSeason = await this.volunteerHistorySeasonRepository.findOne({
         where: {
           volunteer: { id: existingVolunteer.id },
@@ -71,26 +77,27 @@ export class VolunteersService {
       });
 
       if (historicoSeason) {
+        this.logger.warn('Voluntário já está inscrito nesta temporada');
         throw new BadRequestException('Voluntário já está inscrito nesta temporada');
       }
 
       // Buscar dados de volunteer-ministry-season para a temporada
-      console.log('Buscando volunteer-ministry-season para voluntário e temporada:', existingVolunteer.id, season.id);
+      this.logger.debug('Buscando volunteer-ministry-season para voluntário e temporada: ' + existingVolunteer.id + ', ' + season.id);
       const ministrySeasons = await this.volunteerMinistrySeasonRepository.find({
         where: { volunteer: existingVolunteer, season: season },
         relations: ['ministry'],
       });
-      console.log('MinistrySeasons encontrados:', ministrySeasons);
+      this.logger.debug('MinistrySeasons encontrados: ' + JSON.stringify(ministrySeasons));
       // Buscar histórico mais atual para o voluntário
-      console.log('Buscando histórico mais atual para voluntário:', existingVolunteer.id);
+      this.logger.debug('Buscando histórico mais atual para voluntário: ' + existingVolunteer.id);
       const historySeason = await this.volunteerHistorySeasonRepository.findOne({
         where: { volunteer: existingVolunteer },
         order: { id: 'DESC' },
         relations: ['cell'],
       });
-      console.log('HistorySeason encontrado:', historySeason);
+      this.logger.debug('HistorySeason encontrado: ' + JSON.stringify(historySeason));
       if (ministrySeasons && ministrySeasons.length > 0) {
-        console.log('Voluntário já registrado na temporada.');
+        this.logger.debug('Voluntário já registrado na temporada.');
         return {
           data: {
             ministerios: ministrySeasons.map(ms => ({ id: ms.ministry.id, name: ms.ministry.name })),
@@ -133,29 +140,30 @@ export class VolunteersService {
                 cell: historySeason?.cell?.name || null,
                 nome: existingVolunteer.name,
                 volunteerId: existingVolunteer.id,
-                seasonId: season.id
+                seasonId: season.id,
+                newVolunteer: false
               },
             }
           }
         }
-      console.log('Voluntário não possui dados de cell-season ou ministry-season na temporada.');
+      this.logger.debug('Voluntário não possui dados de cell-season ou ministry-season na temporada.');
       // Se não encontrar dados de cell-season, segue para o próximo passo
     }
   }
 
     // 2b. Buscar usuário na API PCS
-    console.log('Buscando usuário na API PCS por email:', data.email);
+    this.logger.debug('Buscando usuário na API PCS por email: ' + data.email);
     let pcsUser = await this.pcsIntegrationService.buscarPessoaTelefoneEmail(data.email);
     if (!pcsUser) {
-      console.log('Usuário não encontrado por email, buscando por telefone:', data.telefone);
+      this.logger.debug('Usuário não encontrado por email, buscando por telefone: ' + data.telefone);
       pcsUser = await this.pcsIntegrationService.buscarPessoaTelefoneEmail(data.telefone);
     }
-    console.log('Usuário PCS encontrado:', pcsUser);
+    this.logger.debug('Usuário PCS encontrado: ' + JSON.stringify(pcsUser));
     if (pcsUser) {
       // Cria ou atualiza voluntário
       let volunteer = existingVolunteer;
       if (!volunteer) {
-        console.log('Criando novo voluntário com dados da PCS.');
+        this.logger.debug('Criando novo voluntário com dados da PCS.');
         volunteer = this.volunteersRepository.create({
           name: pcsUser.name,
           email: pcsUser.email,
@@ -167,7 +175,7 @@ export class VolunteersService {
           personId: Number(pcsUser.id),
         });
       } else {
-        console.log('Atualizando voluntário existente com dados da PCS.');
+        this.logger.debug('Atualizando voluntário existente com dados da PCS.');
         volunteer.name = pcsUser.name;
         volunteer.email = pcsUser.email;
         volunteer.phone = this.normalizePhoneNumber(pcsUser.phone_number);
@@ -178,24 +186,38 @@ export class VolunteersService {
         volunteer.personId = Number(pcsUser.id);
       }
       await this.volunteersRepository.save(volunteer);
-      console.log('Voluntário salvo/atualizado:', volunteer);
+      this.logger.debug('Voluntário salvo/atualizado: ' + JSON.stringify(volunteer));
       // Buscar ministérios na API
-      console.log('Buscando ministérios na API PCS para personId:', pcsUser.id);
+      this.logger.debug('Buscando ministérios na API PCS para personId: ' + pcsUser.id);
       const ministerios = await this.pcsIntegrationService.buscarMinisterios(pcsUser.id);
-      console.log('Ministérios encontrados na PCS:', ministerios);
+      this.logger.debug('Ministérios encontrados na PCS: ' + JSON.stringify(ministerios));
       return {
         data: {
           ministerios: ministerios.ministerios.map(m => ({ id: Number(m.id), name: m.name })) ,
           cell: null,
           nome: volunteer.name,
           volunteerId: volunteer.id,
-          seasonId: season.id
+          seasonId: season.id,
+          newVolunteer: false
         },
         message: 'Dados encontrado',
       };
     }
     // 2c. Usuário não encontrado, criar novo voluntário
-    console.log('Usuário não encontrado na base nem na PCS, criando novo voluntário.');
+    if (existingVolunteer) {
+      this.logger.debug('Usuário não encontrado na base nem na PCS, porém já foi criado antes um temporario.');
+      return {
+      data: {
+        ministerios: [],
+        volunteerId: existingVolunteer.id,
+        seasonId: season.id,
+        newVolunteer: true
+      },
+      message: 'Novo Voluntario',
+    };
+    }
+
+    this.logger.debug('Usuário não encontrado na base nem na PCS, criando novo voluntário.');
     const novoVolunteer = this.volunteersRepository.create({
       name: "TEMP DATA",
       email: data.email,
@@ -204,12 +226,13 @@ export class VolunteersService {
       registration_date: new Date(),
     });
     await this.volunteersRepository.save(novoVolunteer);
-    console.log('Novo voluntário criado:', novoVolunteer);
+    this.logger.debug('Novo voluntário criado: ' + JSON.stringify(novoVolunteer));
     return {
       data: {
         ministerios: [],
         volunteerId: novoVolunteer.id,
-        seasonId: season.id
+        seasonId: season.id,
+        newVolunteer: true
       },
       message: 'Novo Voluntario',
     };
@@ -251,7 +274,7 @@ export class VolunteersService {
     ]);
 
     const groupedVolunteers = this.groupVolunteersData(volunteers);
-    
+
     return {
       items: groupedVolunteers,
       total,

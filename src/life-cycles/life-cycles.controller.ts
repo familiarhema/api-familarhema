@@ -25,21 +25,21 @@ export class LifeCyclesController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@GetUser() user: any, @Body() createLifeCycleDto: CreateLifeCycleDto) {
-    console.log('Authenticated user:', user);
+    // console.log('Authenticated user:', user);
     return this.lifeCyclesService.create(createLifeCycleDto);
   }
 
   @Get()
   @HttpCode(HttpStatus.OK)
   findAll(@GetUser() user: any) {
-    console.log('Authenticated user:', user);
+    // console.log('Authenticated user:', user);
     return this.lifeCyclesService.findAll();
   }
 
   @Get('my-lifecycles')
   @HttpCode(HttpStatus.OK)
   findAllByUserRole(@GetUser() user: any) {
-    console.log('Authenticated user:', user);
+    // console.log('Authenticated user:', user);
     if (!user.role?.id) {
       return [];
     }
@@ -49,7 +49,7 @@ export class LifeCyclesController {
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   findOne(@GetUser() user: any, @Param('id', ParseUUIDPipe) id: string) {
-    console.log('Authenticated user:', user);
+    // console.log('Authenticated user:', user);
     return this.lifeCyclesService.findOne(id);
   }
 
@@ -60,14 +60,14 @@ export class LifeCyclesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateLifeCycleDto: UpdateLifeCycleDto,
   ) {
-    console.log('Authenticated user:', user);
+    // console.log('Authenticated user:', user);
     return this.lifeCyclesService.update(id, updateLifeCycleDto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@GetUser() user: any, @Param('id', ParseUUIDPipe) id: string) {
-    console.log('Authenticated user:', user);
+    // console.log('Authenticated user:', user);
     return this.lifeCyclesService.remove(id);
   }
 }

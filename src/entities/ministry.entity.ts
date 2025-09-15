@@ -10,4 +10,16 @@ export class Ministry {
 
   @Column({ default: true })
   active: boolean;
+
+  @Column({ default: false })
+  hideNewVolunteer: boolean;
+
+  @Column({ default: false })
+  hearing: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  description: string;
+
+  @Column({ default: false })
+  onlyIndicatin: boolean;
 }

@@ -22,6 +22,9 @@ export class VolunteerHistorySeason {
   @Column({ length: 150 })
   email: string;
 
+  @Column({ nullable: true })
+  startServicedAt: number;
+
   @ManyToOne(() => Cell, { nullable: true })
   @JoinColumn({ name: 'cell_id' })
   cell: Cell;

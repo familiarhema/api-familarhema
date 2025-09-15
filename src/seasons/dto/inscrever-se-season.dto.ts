@@ -42,4 +42,8 @@ export class InscreverSeSeasonDto {
   @ValidateNested()
   @Type(() => CelulaDto)
   celula: CelulaDto;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'O serviço desde deve ser um número' })
+  sirvoDesde?: number;
 }

@@ -7,9 +7,17 @@ import { ValidationPipe } from '@nestjs/common';
 // Carrega as variáveis de ambiente antes de tudo
 dotenv.config();
 
+
 async function bootstrap() {
+  // Pega os níveis de log do .env (ex: 'log,error,warn,debug')
+  const levelsEnv = process.env.LEVELS_LOG;
+  let loggerLevels: any = undefined;
+  if (levelsEnv) {
+    loggerLevels = levelsEnv.split(',').map(l => l.trim());
+  }
   const app = await NestFactory.create(AppModule, {
     abortOnError: false,
+    logger: loggerLevels || undefined,
   });
 
   app.useGlobalPipes(new ValidationPipe());

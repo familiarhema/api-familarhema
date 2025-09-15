@@ -13,13 +13,18 @@ export class MinistriesService {
 
   async getActive(): Promise<MinistryResponseDto[]> {
     const ministries = await this.ministriesRepository.find({
-      select: ['id', 'name'],
+      select: ['id', 'name', 'description', 'hearing', 'hideNewVolunteer', 'onlyIndicatin'],
       where: { active: true },
+      order: { name: 'ASC' },
     });
 
     return ministries.map(ministry => ({
       id: ministry.id,
       name: ministry.name,
+      description: ministry.description,
+      hearing: ministry.hearing,
+      hideNewVolunteer: ministry.hideNewVolunteer,
+      onlyIndicatin: ministry.onlyIndicatin,
     }));
   }
 }

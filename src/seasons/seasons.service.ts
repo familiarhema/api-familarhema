@@ -114,7 +114,8 @@ export class SeasonsService {
       cell,
       email: dto.email,
       phone: dto.celular,
-      cellName: cell ? null : dto.celula.nome
+      cellName: cell ? null : dto.celula.nome,
+      startServicedAt: dto.sirvoDesde || null
     });
 
     await this.volunteerHistorySeasonRepository.save(historySeason);
