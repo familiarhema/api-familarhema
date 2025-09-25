@@ -18,6 +18,8 @@ import { VolunteerListResponseDto, VolunteerListItemDto } from './dto/volunteer-
 export class VolunteersService {
   private readonly logger = new Logger(VolunteersService.name);
   constructor(
+    @InjectRepository(Ministry)
+    private ministryRepository: Repository<Ministry>,
     @InjectRepository(Volunteer)
     private volunteersRepository: Repository<Volunteer>,
     @InjectRepository(Season)
@@ -166,9 +168,9 @@ export class VolunteersService {
         this.logger.debug('Criando novo voluntário com dados da PCS.');
         volunteer = this.volunteersRepository.create({
           name: pcsUser.name,
-          email: pcsUser.email,
-          phone: this.normalizePhoneNumber(pcsUser.phone_number),
-          birth_date: new Date(pcsUser.birthdate),
+          email: pcsUser.email || data.email,
+          phone: this.normalizePhoneNumber(pcsUser.phone_number || data.telefone),
+          birth_date: pcsUser.birthdate ? new Date(pcsUser.birthdate) : null,
           photo: pcsUser.avatar,
           registration_date: new Date(pcsUser.created_at),
           status: 'Active',
@@ -188,20 +190,48 @@ export class VolunteersService {
       await this.volunteersRepository.save(volunteer);
       this.logger.debug('Voluntário salvo/atualizado: ' + JSON.stringify(volunteer));
       // Buscar ministérios na API
-      this.logger.debug('Buscando ministérios na API PCS para personId: ' + pcsUser.id);
-      const ministerios = await this.pcsIntegrationService.buscarMinisterios(pcsUser.id);
-      this.logger.debug('Ministérios encontrados na PCS: ' + JSON.stringify(ministerios));
-      return {
-        data: {
-          ministerios: ministerios.ministerios.map(m => ({ id: Number(m.id), name: m.name })) ,
-          cell: null,
-          nome: volunteer.name,
-          volunteerId: volunteer.id,
-          seasonId: season.id,
-          newVolunteer: false
-        },
-        message: 'Dados encontrado',
-      };
+        try{
+            this.logger.debug('Buscando ministérios na API PCS para personId: ' + pcsUser.id);
+            const ministeriosAPP = await this.pcsIntegrationService.buscarMinisterios(pcsUser.id);
+            this.logger.debug('Ministérios encontrados na PCS: ' + JSON.stringify(ministeriosAPP));
+          
+            let ministerios = ministeriosAPP.ministerios.map(m => ({ id: Number(m.id), name: m.name }));
+            if(ministerios.length > 0){
+              const ministriesDB = await this.ministryRepository.find({
+                where: {
+                  active: true,
+                  id: In(ministerios.map(m => m.id)),
+                },
+              });
+
+              ministerios = ministriesDB.map(m => ({ id: m.id, name: m.name }) );
+            }
+
+            return {
+              data: {
+                ministerios: ministerios,
+                cell: null,
+                nome: volunteer.name,
+                volunteerId: volunteer.id,
+                seasonId: season.id,
+                newVolunteer: false
+              },
+              message: 'Dados encontrado',
+            };
+        }catch(ex){
+            this.logger.debug('Erro ao buscar ministérios na PCS: ' + ex.message);
+            return {
+              data: {
+                ministerios: [] ,
+                cell: null,
+                nome: volunteer.name,
+                volunteerId: volunteer.id,
+                seasonId: season.id,
+                newVolunteer: false
+              },
+              message: 'Dados encontrado',
+            };
+        }
     }
     // 2c. Usuário não encontrado, criar novo voluntário
     if (existingVolunteer) {
@@ -239,21 +269,24 @@ export class VolunteersService {
   }
 
   async listVolunteers(seasonId: string, filters: VolunteerFilterDto): Promise<VolunteerListResponseDto> {
-    const pageSize = 100;
+    this.logger.debug(`Filtros recebidos: ${JSON.stringify(filters)}`);
+    this.logger.debug(`Tipo de voluntarioNovo: ${typeof filters.voluntarioNovo}, valor: ${filters.voluntarioNovo}`);
+    const pageSize = filters.pageSize;
     const skip = (filters.page - 1) * pageSize;
 
     const query = this.volunteersRepository
       .createQueryBuilder('v')
-      .leftJoin('volunteer_history_season', 'vhs', 'vhs.volunteer_id = v.id AND vhs.season_id = :seasonId', { seasonId })
+      .innerJoin('volunteer_history_season', 'vhs', 'vhs.volunteer_id = v.id AND vhs.season_id = :seasonId', { seasonId })
       .leftJoin('cells', 'c', 'vhs.cell_id = c.id')
       .leftJoin('volunteer_ministry_season', 'vms', 'vms.volunteer_id = v.id AND vms.season_id = :seasonId', { seasonId })
       .leftJoin('ministries', 'm', 'vms.ministry_id = m.id')
       .select([
         'v.id', 'v.name', 'v.email', 'v.phone', 'v.status', 'v.registration_date',
         'vhs.id as history_id', 'vhs.phone as new_phone', 'vhs.email as new_email',
-        'vhs.cell_name', 'c.name as cell_name_from_id',
+        'vhs.cell_name', 'c.name as cell_name_from_id', 'vhs.cell_id',
         'vms.id as ministry_season_id', 'vms.status as ministry_status',
-        'm.id as ministry_id', 'm.name as ministry_name'
+        'm.id as ministry_id', 'm.name as ministry_name', 'vhs.startServicedAt',
+        'CASE WHEN v.person_id IS NULL THEN true ELSE false END AS is_new_volunteer'
       ]);
 
     if (filters.nome) {
@@ -266,6 +299,21 @@ export class VolunteersService {
 
     if (filters.ministerioId) {
       query.andWhere('m.id = :ministerioId', { ministerioId: filters.ministerioId });
+    }
+
+    if (filters.voluntarioNovo !== undefined) {
+      if (filters.voluntarioNovo) {
+        query.andWhere('v.person_id IS NULL');
+      } else {
+        query.andWhere('v.person_id IS NOT NULL');
+      } 
+    }
+
+    if (filters.pendingApprove) {
+      query.andWhere(`EXISTS (
+        SELECT 1 FROM volunteer_ministry_season vms2
+        WHERE vms2.volunteer_id = v.id AND vms2.season_id = :seasonId AND vms2.status = 'Created'
+      )`);
     }
 
     const [volunteers, total] = await Promise.all([
@@ -287,6 +335,7 @@ export class VolunteersService {
     const volunteersMap = new Map<string, VolunteerListItemDto>();
 
     for (const row of rawData) {
+
       if (!volunteersMap.has(row.v_id)) {
         volunteersMap.set(row.v_id, {
           id: row.v_id,
@@ -299,8 +348,11 @@ export class VolunteersService {
           new_email: row.v_email !== row.new_email ? row.new_email : 'Não mudou email',
           cell_name: row.cell_name_from_id || row.cell_name || null,
           new_cell: !row.cell_name_from_id && row.cell_name ? true : false,
+          cell_id: row.cell_id,
           history_id: row.history_id,
-          new_ministeries: []
+          new_ministeries: [],
+          is_new_volunteer: row.is_new_volunteer,
+          startServicedAt: row.vhs_startServicedAt
         });
       }
 
@@ -318,5 +370,43 @@ export class VolunteersService {
     }
 
     return Array.from(volunteersMap.values());
+  }
+
+  async cancelInscription(volunteerId: string, seasonId: string): Promise<{ message: string }> {
+    this.logger.debug(`Iniciando cancelamento de inscrição para voluntário ${volunteerId} na temporada ${seasonId}`);
+
+    // Verificar se voluntário existe
+    const volunteer = await this.volunteersRepository.findOne({ where: { id: volunteerId } });
+    if (!volunteer) {
+      this.logger.warn(`Voluntário ${volunteerId} não encontrado`);
+      throw new NotFoundException('Voluntário não encontrado');
+    }
+
+    // Verificar se season existe
+    const season = await this.seasonRepository.findOne({ where: { id: seasonId } });
+    if (!season) {
+      this.logger.warn(`Temporada ${seasonId} não encontrada`);
+      throw new NotFoundException('Temporada não encontrada');
+    }
+
+    // Usar transação para deletar
+    await this.volunteersRepository.manager.transaction(async (manager) => {
+      // Deletar de volunteer-history-season
+      const historyDeleted = await manager.delete(VolunteerHistorySeason, {
+        volunteer: { id: volunteerId },
+        season: { id: seasonId }
+      });
+      this.logger.debug(`Deletados ${historyDeleted.affected} registros de volunteer-history-season`);
+
+      // Deletar de volunteer-ministry-season
+      const ministryDeleted = await manager.delete(VolunteerMinistrySeason, {
+        volunteer: { id: volunteerId },
+        season: { id: seasonId }
+      });
+      this.logger.debug(`Deletados ${ministryDeleted.affected} registros de volunteer-ministry-season`);
+    });
+
+    this.logger.debug(`Cancelamento de inscrição concluído para voluntário ${volunteerId} na temporada ${seasonId}`);
+    return { message: 'Inscrição cancelada com sucesso' };
   }
 }

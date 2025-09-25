@@ -6,6 +6,7 @@ import { CreateCellDto, CellBasicResponseDto, CellDetailedResponseDto } from './
 import { AllowApiKey } from 'src/auth/api-key-auth.decorator';
 
 @Controller('cells')
+@UseGuards(ApplicationAuthGuard)
 export class CellsController {
   constructor(private readonly cellsService: CellsService) {}
 
@@ -14,16 +15,15 @@ export class CellsController {
     return this.cellsService.create(createCellDto);
   }
 
-  @AllowApiKey()
   @Get()
   async getAll(): Promise<CellBasicResponseDto[]> {
     return this.cellsService.getAll();
   }
 
   @AllowApiKey()
-  @Get('ativos')
-  async getAtivos(): Promise<CellBasicResponseDto[]> {
-    return this.cellsService.getAtivos();
+  @Get('active')
+  async getActive(): Promise<CellBasicResponseDto[]> {
+    return this.cellsService.getActive();
   }
 
   @Get(':id')

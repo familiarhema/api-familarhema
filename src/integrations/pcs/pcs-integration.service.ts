@@ -32,7 +32,7 @@ export class PCSIntegrationService {
       const url = `${this.baseUrl}/people/v2/people`;
       const params = {
         'where[search_name_or_email]': telefoneEmail,
-        'include': 'phone_numbers'
+        'include': 'phone_numbers,emails'
       };
 
       const { data } = await firstValueFrom(
@@ -54,10 +54,14 @@ export class PCSIntegrationService {
         item => item.type === 'PhoneNumber' && item.attributes.primary
       );
 
+      const primaryMail = data.included?.find(
+        item => item.type === 'Email' && item.attributes.primary
+      );
+
       return {
         id: person.id,
         name: person.attributes.name,
-        email: person.attributes.login_identifier,
+        email: primaryMail?.attributes.address || person.attributes.login_identifier,
         avatar: person.attributes.avatar,
         birthdate: person.attributes.birthdate,
         created_at: person.attributes.created_at,

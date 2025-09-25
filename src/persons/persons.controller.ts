@@ -16,15 +16,15 @@ import { CreatePersonDto } from './dto/create-person.dto';
 import { UpdatePersonDto } from './dto/update-person.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../common/decorators/get-user.decorator';
+import { ApplicationAuthGuard } from 'src/auth/application-auth.guard';
 
 @Controller('persons')
-@UseGuards(JwtAuthGuard)
+@UseGuards(ApplicationAuthGuard)
 export class PersonsController {
   constructor(private readonly personsService: PersonsService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard)
   create(@GetUser() user: any, @Body() createPersonDto: CreatePersonDto) {
     console.log('Authenticated user:', user);
     return this.personsService.create(createPersonDto);
@@ -32,7 +32,6 @@ export class PersonsController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   findAll(@GetUser() user: any) {
     console.log('Authenticated user:', user);
     return this.personsService.findAll();
@@ -40,7 +39,6 @@ export class PersonsController {
 
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   findOne(@GetUser() user: any, @Param('id', ParseUUIDPipe) id: string) {
     console.log('Authenticated user:', user);
     return this.personsService.findOne(id);
@@ -48,7 +46,6 @@ export class PersonsController {
 
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   update(
     @GetUser() user: any,
     @Param('id', ParseUUIDPipe) id: string,
@@ -60,7 +57,6 @@ export class PersonsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtAuthGuard)
   remove(@GetUser() user: any, @Param('id', ParseUUIDPipe) id: string) {
     console.log('Authenticated user:', user);
     return this.personsService.remove(id);

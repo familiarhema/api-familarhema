@@ -5,9 +5,10 @@ import { UserFilterDto } from './dto/user-filter.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { GetUser } from '../auth/get-user.decorator';
+import { ApplicationAuthGuard } from 'src/auth/application-auth.guard';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard)
+@UseGuards(ApplicationAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

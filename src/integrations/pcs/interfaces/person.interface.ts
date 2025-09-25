@@ -2,6 +2,7 @@ interface PCSPhoneNumber {
   type: string;
   id: string;
   attributes: {
+    address: string;
     country_code: string;
     e164: string;
     location: string;

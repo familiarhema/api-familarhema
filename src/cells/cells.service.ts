@@ -51,7 +51,7 @@ export class CellsService {
     }));
   }
 
-  async getAtivos(): Promise<CellBasicResponseDto[]> {
+  async getActive(): Promise<CellBasicResponseDto[]> {
     const cells = await this.cellsRepository.find({
       where: { active: true },
       select: ['id', 'name'],
