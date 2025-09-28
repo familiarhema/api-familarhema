@@ -22,4 +22,7 @@ export class Ministry {
 
   @Column({ default: false })
   onlyIndicatin: boolean;
+
+  @Column({ length: 500, nullable: true })
+  linkShadowGroup: string;
 }

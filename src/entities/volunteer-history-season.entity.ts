@@ -31,4 +31,16 @@ export class VolunteerHistorySeason {
 
   @Column({ length: 100, nullable: true, name: 'cell_name' })
   cellName: string;
+  
+  @Column({ type: 'boolean', default: false })
+  blockedManager: boolean;
+
+  @Column({ length: 4000, nullable: true })
+  reason: string;
+
+  @Column({ type: 'int', default: 0 })
+  cell_frequency: number;
+
+  @Column({ type: 'boolean', default: false })
+  attendedVolunteersDay: boolean;
 }

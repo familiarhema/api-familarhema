@@ -184,11 +184,11 @@ export class SeasonsService {
   async getVolunteersNewVsOld(seasonId: string) {
     const result = await this.volunteerHistorySeasonRepository
       .createQueryBuilder('vhs')
-      .select("CASE WHEN v.person_id IS NULL THEN 'novo' ELSE 'antigo' END", 'type')
+      .select("CASE WHEN vhs.startServicedAt IS NULL THEN 'novo' ELSE 'antigo' END", 'type')
       .addSelect('COUNT(DISTINCT vhs.volunteer_id)', 'total')
       .innerJoin('vhs.volunteer', 'v')
       .where('vhs.season_id = :seasonId', { seasonId })
-      .groupBy("CASE WHEN v.person_id IS NULL THEN 'novo' ELSE 'antigo' END")
+      .groupBy("CASE WHEN vhs.startServicedAt IS NULL THEN 'novo' ELSE 'antigo' END")
       .getRawMany();
 
     const response = { novo: 0, antigo: 0 };

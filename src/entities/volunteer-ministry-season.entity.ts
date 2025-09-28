@@ -29,4 +29,7 @@ export class VolunteerMinistrySeason {
 
   @Column({ name: 'rejection_description', type: 'text', nullable: true })
   rejectionDescription: string;
+
+    @Column({ type: 'boolean', default: false })
+  shadow: boolean;
 }

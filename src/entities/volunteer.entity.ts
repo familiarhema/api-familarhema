@@ -14,7 +14,7 @@ export class Volunteer {
   @Column({ length: 50 })
   phone: string;
 
-  @Column({ type: 'enum', enum: ['Active', 'Inactive', 'Shadow'], default: 'Active' })
+  @Column({ type: 'enum', enum: ['Active', 'Inactive', 'Pending'], default: 'Active' })
   status: string;
 
   @CreateDateColumn()
@@ -28,4 +28,5 @@ export class Volunteer {
 
   @Column({ name: 'person_id', type: 'integer', nullable: true })
   personId: number;
+
 }

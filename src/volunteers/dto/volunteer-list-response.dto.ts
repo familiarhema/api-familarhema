@@ -12,6 +12,7 @@ export class VolunteerListItemDto {
   phone: string;
   status: string;
   registration_date: Date;
+  birth_date: Date;
   new_phone: string;
   new_email: string;
   cell_id: string;
@@ -21,6 +22,8 @@ export class VolunteerListItemDto {
   new_ministeries: MinisterioVoluntarioDto[];
   is_new_volunteer: boolean;
   startServicedAt?: number;
+  blockedManager: boolean;
+  reason: string;
 }
 
 export class VolunteerListResponseDto {

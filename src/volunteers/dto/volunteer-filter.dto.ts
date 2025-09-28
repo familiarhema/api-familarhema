@@ -35,6 +35,16 @@ export class VolunteerFilterDto {
   })
   pendingApprove?: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true' || value === '1') return true;
+    if (value === 'false' || value === '0') return false;
+    return undefined;
+  })
+  blockedManager?: boolean;
+
   @IsNumber()
   @Type(() => Number)
   page: number = 1;
