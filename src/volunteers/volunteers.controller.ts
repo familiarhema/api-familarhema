@@ -11,7 +11,11 @@ import { BatchApproveDto } from './dto/batch-approve.dto';
 import { BlockVolunteerDto } from './dto/block-volunteer.dto';
 import { NoCellVolunteerDto } from './dto/no-cell-volunteer.dto';
 import { NoMinistryVolunteerDto } from './dto/no-ministry-volunteer.dto';
+import { UpdateCellFrequencyDto } from './dto/update-cell-frequency.dto';
+import { UpdateAttendedVolunteersDayDto } from './dto/update-attended-volunteers-day.dto';
 import { AllowApiKey } from 'src/auth/api-key-auth.decorator';
+import { CellVolunteersDto } from './dto/cell-volunteers.dto';
+import { SeasonVolunteersDto } from './dto/season-volunteers.dto';
 
 @Controller('volunteers')
 @UseGuards(ApplicationAuthGuard)
@@ -103,5 +107,55 @@ export class VolunteersController {
   @Get('season/:seasonId/no-ministry')
   async getVolunteersWithoutMinistry(@Param('seasonId') seasonId: string): Promise<NoMinistryVolunteerDto[]> {
     return this.volunteersService.getVolunteersWithoutMinistry(seasonId);
+  }
+
+  @Put(':idVolunteer/cell-frequency')
+  @AllowApiKey()
+  async updateCellFrequency(
+    @Param('idVolunteer') volunteerId: string,
+    @Body() dto: UpdateCellFrequencyDto,
+  ): Promise<{ message: string }> {
+    return this.volunteersService.updateCellFrequency(volunteerId, dto.frequency);
+  }
+
+  @Put(':idVolunteer/season/:idSeason/attended-volunteers-day')
+  async updateAttendedVolunteersDay(
+    @Param('idVolunteer') volunteerId: string,
+    @Param('idSeason') seasonId: string,
+    @Body() dto: UpdateAttendedVolunteersDayDto,
+  ): Promise<{ message: string }> {
+    return this.volunteersService.updateAttendedVolunteersDay(volunteerId, seasonId, dto.attended);
+  }
+
+  @Post(':idVolunteer/season/:idSeason/integrate/person')
+  async integratePerson(
+    @Param('idVolunteer') volunteerId: string,
+    @Param('idSeason') seasonId: string,
+  ): Promise<{ message: string; personId?: string }> {
+    return this.volunteersService.integratePerson(volunteerId, seasonId);
+  }
+
+  @Post('season/:idSeason/integrate/person')
+  async integrateAllPersons(@Param('idSeason') seasonId: string): Promise<{ message: string }> {
+    return this.volunteersService.integrateAllPersons(seasonId);
+  }
+
+  @Post(':idVolunteer/season/:idSeason/integrate/ministries')
+  async integrateMinistries(
+    @Param('idVolunteer') volunteerId: string,
+    @Param('idSeason') seasonId: string,
+  ): Promise<{ message: string }> {
+    return this.volunteersService.integrateMinistries(volunteerId, seasonId);
+  }
+
+  @Get('cell/:cellId')
+  @AllowApiKey()
+  async getVolunteersByCell(@Param('cellId') cellId: string): Promise<CellVolunteersDto[]> {
+    return this.volunteersService.getVolunteersByCell(cellId);
+  }
+
+  @Get('season/:seasonId/list')
+  async getVolunteersBySeason(@Param('seasonId') seasonId: string): Promise<SeasonVolunteersDto[]> {
+    return this.volunteersService.getVolunteersBySeason(seasonId);
   }
 }

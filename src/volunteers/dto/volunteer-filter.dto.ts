@@ -11,9 +11,17 @@ export class VolunteerFilterDto {
   email?: string;
 
   @IsOptional()
+  @IsString()
+  telefone?: string;
+
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
   ministerioId?: number;
+
+  @IsOptional()
+  @IsString()
+  cellId?: string;
 
   @IsOptional()
   @IsBoolean()
@@ -44,6 +52,16 @@ export class VolunteerFilterDto {
     return undefined;
   })
   blockedManager?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true' || value === '1') return true;
+    if (value === 'false' || value === '0') return false;
+    return undefined;
+  })
+  attendedVolunteersDay?: boolean;
 
   @IsNumber()
   @Type(() => Number)

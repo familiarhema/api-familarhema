@@ -8,6 +8,7 @@ import { Cell } from '../entities/cell.entity';
 import { Ministry } from '../entities/ministry.entity';
 import { VolunteerHistorySeason } from '../entities/volunteer-history-season.entity';
 import { VolunteerMinistrySeason } from '../entities/volunteer-ministry-season.entity';
+import { VolunteersModule } from '../volunteers/volunteers.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { VolunteerMinistrySeason } from '../entities/volunteer-ministry-season.e
       VolunteerHistorySeason,
       VolunteerMinistrySeason
     ]),
+    VolunteersModule,
   ],
   controllers: [SeasonsController],
   providers: [SeasonsService],

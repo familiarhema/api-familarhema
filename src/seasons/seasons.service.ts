@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { SeasonFilterDto } from './dto/season-filter.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository, LessThanOrEqual, MoreThanOrEqual, Not, IsNull } from 'typeorm';
 import { Season } from '../entities/season.entity';
 import { Volunteer } from '../entities/volunteer.entity';
 import { Cell } from '../entities/cell.entity';
@@ -10,6 +10,7 @@ import { VolunteerHistorySeason } from '../entities/volunteer-history-season.ent
 import { VolunteerMinistrySeason } from '../entities/volunteer-ministry-season.entity';
 import { InscreverSeSeasonDto } from './dto/inscrever-se-season.dto';
 import { UpdateVolunteerSeasonDto } from './dto/update-volunteer-season.dto';
+import { VolunteersService } from '../volunteers/volunteers.service';
 
 @Injectable()
 export class SeasonsService {
@@ -45,6 +46,7 @@ export class SeasonsService {
     private volunteerHistorySeasonRepository: Repository<VolunteerHistorySeason>,
     @InjectRepository(VolunteerMinistrySeason)
     private volunteerMinistrySeasonRepository: Repository<VolunteerMinistrySeason>,
+    private volunteersService: VolunteersService,
   ) {}
 
   async inscreverSe(seasonId: string, dto: InscreverSeSeasonDto) {
@@ -314,6 +316,72 @@ export class SeasonsService {
         cell_id: dto.cell_id,
         ministries: dto.ministries
       }
+    };
+  }
+
+  async integrateVolunteersByMinistry(seasonId: string, ministryId: string) {
+    // 1. Verificar se a temporada existe
+    const season = await this.seasonRepository.findOne({ where: { id: seasonId } });
+    if (!season) {
+      throw new NotFoundException('Temporada não encontrada');
+    }
+
+    // 2. Verificar se o ministério existe
+    const ministryIdNum = parseInt(ministryId);
+    const ministry = await this.ministryRepository.findOne({ where: { id: ministryIdNum } });
+    if (!ministry) {
+      throw new NotFoundException('Ministério não encontrado');
+    }
+
+    // 3. Buscar todos os voluntários que possuem o ministério como 'Accepted' para a temporada
+    const acceptedVolunteers = await this.volunteerMinistrySeasonRepository.find({
+      where: {
+        season: { id: seasonId },
+        ministry: { id: ministryIdNum },
+        status: 'Accepted',
+        volunteer: { personId: Not(IsNull()) }
+      },
+      relations: ['volunteer']
+    });
+
+    if (acceptedVolunteers.length === 0) {
+      return {
+        message: 'Nenhum voluntário encontrado com o ministério aceito para esta temporada',
+        integratedCount: 0
+      };
+    }
+
+    // 4. Para cada voluntário, chamar integrateMinistries
+    const results = [];
+    for (const volunteerMinistry of acceptedVolunteers) {
+      try {
+        const result = await this.volunteersService.integrateMinistries(
+          volunteerMinistry.volunteer.id,
+          seasonId
+        );
+        results.push({
+          volunteerId: volunteerMinistry.volunteer.id,
+          volunteerName: volunteerMinistry.volunteer.name,
+          success: true,
+          message: result.message
+        });
+      } catch (error) {
+        results.push({
+          volunteerId: volunteerMinistry.volunteer.id,
+          volunteerName: volunteerMinistry.volunteer.name,
+          success: false,
+          message: error.message
+        });
+      }
+    }
+
+    const successfulIntegrations = results.filter(r => r.success).length;
+
+    return {
+      message: `Integração concluída. ${successfulIntegrations} de ${acceptedVolunteers.length} voluntários integrados com sucesso`,
+      integratedCount: successfulIntegrations,
+      totalVolunteers: acceptedVolunteers.length,
+      results
     };
   }
 }

@@ -24,6 +24,7 @@ export class VolunteerListItemDto {
   startServicedAt?: number;
   blockedManager: boolean;
   reason: string;
+  attendedVolunteersDay:boolean;
 }
 
 export class VolunteerListResponseDto {

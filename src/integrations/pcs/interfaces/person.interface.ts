@@ -44,3 +44,21 @@ export interface PCSPersonDTO {
   created_at: string;
   phone_number?: string;
 }
+
+export interface PCSFullPersonDTO {
+  id: string;
+  attributes: {
+    avatar: string;
+    birthdate: string;
+    first_name: string;
+    last_name: string;
+    login_identifier: string;
+    name: string;
+    status: string;
+  };
+  email: string;
+  phone: string;
+  ministerios: string[];
+  celula: string;
+  serveDesde: string;
+}
