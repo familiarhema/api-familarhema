@@ -3,6 +3,7 @@ class MinisterioVoluntarioDto {
   status: string;
   id: number;
   name: string;
+  principal: boolean;
 }
 
 export class VolunteerListItemDto {

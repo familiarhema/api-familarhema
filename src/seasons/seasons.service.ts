@@ -93,11 +93,21 @@ export class SeasonsService {
     // }
 
     // 5. Verificar se os ministérios existem
-    const ministerios = await this.ministryRepository.find({
-      where: dto.ministerios.map(id => ({ id }))
+    const ministerioPrincipal = await this.ministryRepository.findOne({
+      where: { id: dto.ministerioPrincipal }
     });
 
-    if (ministerios.length !== dto.ministerios.length) {
+    if (!ministerioPrincipal) {
+      throw new NotFoundException('Ministério principal não encontrado');
+    }
+
+    const outrosMinisterios = dto.ministerios?.length
+      ? await this.ministryRepository.find({
+          where: dto.ministerios.map(id => ({ id }))
+        })
+      : [];
+
+    if (outrosMinisterios.length !== (dto.ministerios?.length ?? 0)) {
       throw new NotFoundException('Um ou mais ministérios não foram encontrados');
     }
 
@@ -122,14 +132,24 @@ export class SeasonsService {
     await this.volunteerHistorySeasonRepository.save(historySeason);
 
     // 8. Criar registros na volunteer_ministry_season
-    const ministrySeasons = ministerios.map(ministry => 
+    const ministrySeasons = [
       this.volunteerMinistrySeasonRepository.create({
         volunteer,
-        ministry,
+        ministry: ministerioPrincipal,
         season,
-        status: 'Created'
-      })
-    );
+        status: 'Created',
+        principal: true
+      }),
+      ...outrosMinisterios.map(ministry =>
+        this.volunteerMinistrySeasonRepository.create({
+          volunteer,
+          ministry,
+          season,
+          status: 'Created',
+          principal: false
+        })
+      )
+    ];
 
     await this.volunteerMinistrySeasonRepository.save(ministrySeasons);
 
@@ -138,7 +158,8 @@ export class SeasonsService {
       data: {
         seasonId: season.id,
         volunteerId: volunteer.id,
-        ministerios: ministerios.map(m => ({ id: m.id, name: m.name })),
+        ministerioPrincipal: { id: ministerioPrincipal.id, name: ministerioPrincipal.name },
+        ministerios: outrosMinisterios.map(m => ({ id: m.id, name: m.name })),
         celula: {
           id: cell?.id || '00000000-0000-0000-0000-000000000000',
           nome: cell ? cell.name : dto.celula.nome

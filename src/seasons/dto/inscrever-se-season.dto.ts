@@ -33,10 +33,14 @@ export class InscreverSeSeasonDto {
   @Type(() => Date)
   dataNascimento?: Date;
 
-  @IsNotEmpty({ message: 'É necessário informar ao menos um ministério' })
+  @IsNotEmpty({ message: 'É necessário informar o ministério principal' })
+  @IsNumber({}, { message: 'O ministério principal deve ser um número' })
+  ministerioPrincipal: number;
+
+  @IsOptional()
   @IsArray({ message: 'Ministérios deve ser um array' })
   @IsNumber({}, { each: true, message: 'Cada código de ministério deve ser um número' })
-  ministerios: number[];
+  ministerios?: number[];
 
   @IsNotEmpty({ message: 'A célula é obrigatória' })
   @ValidateNested()

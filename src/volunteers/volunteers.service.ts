@@ -285,7 +285,7 @@ export class VolunteersService {
         'v.id', 'v.name', 'v.email', 'v.phone', 'v.status', 'v.registration_date', 'v.birth_date',
         'vhs.id as history_id', 'vhs.phone as new_phone', 'vhs.email as new_email',
         'vhs.cell_name', 'c.name as cell_name_from_id', 'vhs.cell_id',
-        'vms.id as ministry_season_id', 'vms.status as ministry_status','vhs.blockedManager',
+        'vms.id as ministry_season_id', 'vms.status as ministry_status','vhs.blockedManager','vms.principal',
         'm.id as ministry_id', 'm.name as ministry_name', 'vhs.startServicedAt', 'vhs.reason',
         'CASE WHEN vhs.startServicedAt IS NULL THEN true ELSE false END AS is_new_volunteer'
       ]);
@@ -371,7 +371,8 @@ export class VolunteersService {
             new_id: row.ministry_season_id,
             status: row.ministry_status,
             id: row.ministry_id,
-            name: row.ministry_name
+            name: row.ministry_name,
+            principal: row.vms_principal,
           });
         }
       }
