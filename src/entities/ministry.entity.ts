@@ -25,4 +25,7 @@ export class Ministry {
 
   @Column({ length: 500, nullable: true })
   linkShadowGroup: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  team_id: string;
 }

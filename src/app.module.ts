@@ -16,6 +16,10 @@ import { MinistriesModule } from './ministries/ministries.module';
 import * as process from 'process';
 import { SeasonsModule } from './seasons/seasons.module';
 import { UsersModule } from './users/users.module';
+import { ChildrensModule } from './kids/childrens/childrens.module';
+import { ResponsiblesModule } from './kids/responsibles/responsibles.module';
+import { EventsModule } from './kids/events/events.module';
+import { MykidsModule } from './integrations/mykids/mykids.module';
 
 @Module({
   imports: [
@@ -41,7 +45,11 @@ import { UsersModule } from './users/users.module';
     CellsModule,
     MinistriesModule,
     SeasonsModule, 
-    UsersModule
+    UsersModule,
+    ChildrensModule,
+    ResponsiblesModule,
+    EventsModule,
+    MykidsModule
   ],
   controllers: [AppController],
   providers: [

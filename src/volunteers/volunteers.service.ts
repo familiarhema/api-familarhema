@@ -14,6 +14,8 @@ import { VolunteerHistorySeason } from '../entities/volunteer-history-season.ent
 import { VolunteerFilterDto } from './dto/volunteer-filter.dto';
 import { VolunteerListResponseDto, VolunteerListItemDto } from './dto/volunteer-list-response.dto';
 import { VolunteerStatusQueryDto } from './dto/volunteer-status-query.dto';
+import { CellVolunteersDto } from './dto/cell-volunteers.dto';
+import { SeasonVolunteersDto } from './dto/season-volunteers.dto';
 
 @Injectable()
 export class VolunteersService {
@@ -284,7 +286,7 @@ export class VolunteersService {
       .select([
         'v.id', 'v.name', 'v.email', 'v.phone', 'v.status', 'v.registration_date', 'v.birth_date',
         'vhs.id as history_id', 'vhs.phone as new_phone', 'vhs.email as new_email',
-        'vhs.cell_name', 'c.name as cell_name_from_id', 'vhs.cell_id',
+        'vhs.cell_name', 'c.name as cell_name_from_id', 'vhs.cell_id','vhs.attendedVolunteersDay',
         'vms.id as ministry_season_id', 'vms.status as ministry_status','vhs.blockedManager','vms.principal',
         'm.id as ministry_id', 'm.name as ministry_name', 'vhs.startServicedAt', 'vhs.reason',
         'CASE WHEN vhs.startServicedAt IS NULL THEN true ELSE false END AS is_new_volunteer'
@@ -295,11 +297,19 @@ export class VolunteersService {
     }
 
     if (filters.email) {
-      query.andWhere('v.email ILIKE :email', { email: `%${filters.email}%` });
+      query.andWhere('vhs.email ILIKE :email', { email: `%${filters.email}%` });
+    }
+
+    if (filters.telefone) {
+      query.andWhere('vhs.phone ILIKE :telefone', { telefone: `%${filters.telefone}%` });
     }
 
     if (filters.ministerioId) {
       query.andWhere('m.id = :ministerioId', { ministerioId: filters.ministerioId });
+    }
+
+    if (filters.attendedVolunteersDay !== undefined) {
+      query.andWhere('vhs.attendedVolunteersDay = :attendedVolunteersDay', { attendedVolunteersDay: filters.attendedVolunteersDay });
     }
 
     if (filters.voluntarioNovo !== undefined) {
@@ -319,6 +329,10 @@ export class VolunteersService {
 
     if (filters.blockedManager !== undefined) {
       query.andWhere('vhs.blockedManager = :blockedManager', { blockedManager: filters.blockedManager });
+    }
+
+    if (filters.cellId) {
+      query.andWhere('vhs.cell_id = :cellId', { cellId: filters.cellId });
     }
 
     const [volunteers, total] = await Promise.all([
@@ -361,6 +375,7 @@ export class VolunteersService {
           startServicedAt: row.vhs_startServicedAt,
           blockedManager: row.vhs_blockedManager,
           reason: row.vhs_reason || '',
+          attendedVolunteersDay: row.vhs_attendedVolunteersDay
         });
       }
 
@@ -499,12 +514,12 @@ export class VolunteersService {
       throw new BadRequestException('Procure a gestao para mais informações');
     }
 
-    // 3. Buscar ministérios com status 'Accepted' para o voluntário nesta temporada
+    // 3. Buscar ministérios com status 'Accepted' ou 'Integrated' para o voluntário nesta temporada
     const acceptedMinistries = await this.volunteerMinistrySeasonRepository.find({
       where: {
         volunteer: { id: historySeason.volunteer.id },
         season: { id: season.id },
-        status: 'Accepted'
+        status: In(['Accepted', 'Integrated'])
       },
       relations: ['ministry']
     });
@@ -680,6 +695,308 @@ export class VolunteersService {
       .getRawMany();
 
     this.logger.debug(`Encontrados ${result.length} voluntários sem ministério`);
+    return result;
+  }
+
+  async updateCellFrequency(volunteerId: string, frequency: number): Promise<{ message: string }> {
+    this.logger.debug(`Atualizando frequência na célula para voluntário ${volunteerId} com frequência ${frequency}`);
+
+    // Verificar se voluntário existe
+    const volunteer = await this.volunteersRepository.findOne({ where: { id: volunteerId } });
+    if (!volunteer) {
+      this.logger.warn(`Voluntário ${volunteerId} não encontrado`);
+      throw new NotFoundException('Voluntário não encontrado');
+    }
+
+    // Buscar a última temporada cadastrada
+    const lastSeason = await this.seasonRepository
+      .createQueryBuilder('s')
+      .orderBy('s.dataInicio', 'DESC')
+      .limit(1)
+      .getOne();
+
+    if (!lastSeason) {
+      this.logger.warn('Nenhuma temporada encontrada');
+      throw new NotFoundException('Nenhuma temporada encontrada');
+    }
+
+    this.logger.debug(`Última temporada encontrada: ${lastSeason.id} - ${lastSeason.name}`);
+
+    // Encontrar o registro em volunteer_history_season
+    const historySeason = await this.volunteerHistorySeasonRepository.findOne({
+      where: {
+        volunteer: { id: volunteerId },
+        season: { id: lastSeason.id }
+      }
+    });
+
+    if (!historySeason) {
+      this.logger.warn(`Registro de histórico do voluntário ${volunteerId} na última temporada ${lastSeason.id} não encontrado`);
+      throw new NotFoundException('Registro de histórico do voluntário nesta temporada não encontrado');
+    }
+
+    // Atualizar a frequência
+    historySeason.cell_frequency = frequency;
+    await this.volunteerHistorySeasonRepository.save(historySeason);
+
+    this.logger.debug(`Frequência atualizada para voluntário ${volunteerId} na temporada ${lastSeason.id}`);
+    return { message: 'Frequência na célula atualizada com sucesso' };
+  }
+
+  async updateAttendedVolunteersDay(volunteerId: string, seasonId: string, attended: boolean): Promise<{ message: string }> {
+    this.logger.debug(`Atualizando presença no dia dos voluntários para voluntário ${volunteerId} na temporada ${seasonId} com valor ${attended}`);
+
+    // Verificar se voluntário existe
+    const volunteer = await this.volunteersRepository.findOne({ where: { id: volunteerId } });
+    if (!volunteer) {
+      this.logger.warn(`Voluntário ${volunteerId} não encontrado`);
+      throw new NotFoundException('Voluntário não encontrado');
+    }
+
+    // Verificar se season existe
+    const season = await this.seasonRepository.findOne({ where: { id: seasonId } });
+    if (!season) {
+      this.logger.warn(`Temporada ${seasonId} não encontrada`);
+      throw new NotFoundException('Temporada não encontrada');
+    }
+
+    // Encontrar o registro em volunteer_history_season
+    const historySeason = await this.volunteerHistorySeasonRepository.findOne({
+      where: {
+        volunteer: { id: volunteerId },
+        season: { id: seasonId }
+      }
+    });
+
+    if (!historySeason) {
+      this.logger.warn(`Registro de histórico do voluntário ${volunteerId} na temporada ${seasonId} não encontrado`);
+      throw new NotFoundException('Registro de histórico do voluntário nesta temporada não encontrado');
+    }
+
+    // Atualizar a presença
+    historySeason.attendedVolunteersDay = attended;
+    await this.volunteerHistorySeasonRepository.save(historySeason);
+
+    this.logger.debug(`Presença atualizada para voluntário ${volunteerId} na temporada ${seasonId}`);
+    return { message: 'Presença no dia dos voluntários atualizada com sucesso' };
+  }
+
+  async integratePerson(volunteerId: string, seasonId: string): Promise<{ message: string; personId?: string }> {
+    this.logger.debug(`Iniciando integração de pessoa para voluntário ${volunteerId} na temporada ${seasonId}`);
+
+    // 1. Buscar voluntário com dados de histórico da temporada e célula
+    const historySeason = await this.volunteerHistorySeasonRepository.findOne({
+      where: {
+        volunteer: { id: volunteerId },
+        season: { id: seasonId }
+      },
+      relations: ['volunteer', 'cell']
+    });
+
+    if (!historySeason) {
+      this.logger.warn(`Registro de histórico do voluntário ${volunteerId} na temporada ${seasonId} não encontrado`);
+      throw new NotFoundException('Registro de histórico do voluntário nesta temporada não encontrado');
+    }
+
+    const volunteer = historySeason.volunteer;
+
+    // 2. Verificar se já está integrado
+    if (volunteer.personId) {
+      this.logger.debug(`Voluntário ${volunteerId} já está integrado com personId ${volunteer.personId}`);
+      return { message: 'Voluntário já está integrado', personId: volunteer.personId.toString() };
+    }
+
+    // 3. Chamar adicionarPessoa
+    const nameParts = volunteer.name.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ') || '';
+    const birthdate = volunteer.birth_date ? new Date(volunteer.birth_date).toISOString().split('T')[0] : '';
+
+    this.logger.debug(`Chamando adicionarPessoa com firstName: ${firstName}, lastName: ${lastName}, birthdate: ${birthdate}`);
+    const personId = await this.pcsIntegrationService.adicionarPessoa(firstName, lastName, birthdate);
+
+    // 4. Atualizar volunteer com personId
+    volunteer.personId = Number(personId);
+    await this.volunteersRepository.save(volunteer);
+    this.logger.debug(`Voluntário ${volunteerId} atualizado com personId ${personId}`);
+
+    // 5. Chamar adicionarEmail
+    if (historySeason.email) {
+      this.logger.debug(`Chamando adicionarEmail com email: ${historySeason.email}, personId: ${personId}`);
+      await this.pcsIntegrationService.adicionarEmail(personId, historySeason.email);
+    }
+
+    // 6. Chamar adicionarTelefone
+    if (historySeason.phone) {
+      const cleanPhone = historySeason.phone.replace(/\D/g, '');
+      const phoneWithCountry = `55${cleanPhone}`;
+      this.logger.debug(`Chamando adicionarTelefone com phone: ${phoneWithCountry}, personId: ${personId}`);
+      await this.pcsIntegrationService.adicionarTelefone(personId, phoneWithCountry);
+    }
+
+    // 7. Chamar adicionarCelula se tiver cell
+    if (historySeason.cell) {
+      this.logger.debug(`Chamando adicionarCelula com nomeCelula: ${historySeason.cell.name}, personId: ${personId}`);
+      await this.pcsIntegrationService.adicionarCelula(personId, historySeason.cell.name);
+    }
+
+    // 8. Chamar adicionarServeDesde
+    const ano = historySeason.startServicedAt ? new Date(historySeason.startServicedAt).getFullYear() : new Date().getFullYear();
+    this.logger.debug(`Chamando adicionarServeDesde com ano: ${ano}, personId: ${personId}`);
+    await this.pcsIntegrationService.adicionarServeDesde(personId, ano);
+
+    // 9. Chamar darPermissaoApp
+    this.logger.debug(`Chamando darPermissaoApp para personId: ${personId}`);
+    await this.pcsIntegrationService.darPermissaoApp(personId);
+
+    this.logger.debug(`Integração concluída para voluntário ${volunteerId}`);
+    return { message: 'Integração realizada com sucesso', personId };
+  }
+
+  async integrateAllPersons(seasonId: string): Promise<{ message: string }> {
+    this.logger.debug(`Iniciando integração em lote para temporada ${seasonId}`);
+
+    // Buscar voluntários pendentes
+    const pendingVolunteers = await this.volunteersRepository
+      .createQueryBuilder('v')
+      .select('v.id', 'id')
+      .innerJoin('volunteer_history_season', 'vhs', 'v.id = vhs.volunteer_id')
+      .innerJoin('cells', 'c', 'vhs.cell_id = c.id')
+      .where('v.person_id IS NULL')
+      .andWhere('vhs.blockedManager = false')
+      .andWhere('vhs.season_id = :seasonId', { seasonId })
+      .andWhere(`EXISTS (
+        SELECT 1 FROM volunteer_ministry_season vm
+        WHERE vm.volunteer_id = v.id AND vm.season_id = :seasonId AND vm.status = 'Accepted'
+      )`)
+      .setParameters({ seasonId })
+      .getRawMany();
+
+    this.logger.debug(`Encontrados ${pendingVolunteers.length} voluntários pendentes para integração`);
+
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    for (const volunteer of pendingVolunteers) {
+      try {
+        this.logger.debug(`Integrando voluntário ${volunteer.id}`);
+        await this.integratePerson(volunteer.id, seasonId);
+        await delay(2000); // Delay de 2 segundos entre chamadas
+      } catch (error) {
+        this.logger.error(`Erro ao integrar voluntário ${volunteer.id}: ${error.message}`);
+        // Continua para o próximo
+      }
+    }
+
+    this.logger.debug(`Integração em lote concluída para temporada ${seasonId}`);
+    return { message: 'Integração em lote realizada com sucesso' };
+  }
+
+  async integrateMinistries(volunteerId: string, seasonId: string): Promise<{ message: string }> {
+    this.logger.debug(`Iniciando integração de ministérios para voluntário ${volunteerId} na temporada ${seasonId}`);
+
+    // Verificar se voluntário tem personId
+    const volunteer = await this.volunteersRepository.findOne({ where: { id: volunteerId } });
+    if (!volunteer || !volunteer.personId) {
+      throw new BadRequestException('Voluntário não integrado ao PCS ainda.');
+    }
+
+    // Buscar ministérios com status 'Accepted' para a temporada
+    const acceptedMinistries = await this.volunteerMinistrySeasonRepository.find({
+      where: {
+        volunteer: { id: volunteerId },
+        season: { id: seasonId },
+        status: 'Accepted'
+      },
+      relations: ['ministry']
+    });
+
+    if (acceptedMinistries.length === 0) {
+      this.logger.debug(`Nenhum ministério para integrar para voluntário ${volunteerId}`);
+      return { message: 'Nenhum ministério para integrar' };
+    }
+
+    const ministryIds = acceptedMinistries.map(ms => ms.ministry.id.toString());
+
+    this.logger.debug(`Integrando ministérios ${ministryIds.join(', ')} para personId ${volunteer.personId}`);
+
+    // Chamar atualizarMinisterios
+    await this.pcsIntegrationService.atualizarMinisterios(volunteer.personId.toString(), ministryIds);
+
+    // Chamar adicionarTemporada
+    await this.pcsIntegrationService.adicionarTemporada(volunteer.personId.toString(), "02/2025");
+
+    // Atualizar status para 'Integrated'
+    for (const ms of acceptedMinistries) {
+      ms.status = 'Integrated';
+    }
+    await this.volunteerMinistrySeasonRepository.save(acceptedMinistries);
+
+    this.logger.debug(`Integração de ministérios concluída para voluntário ${volunteerId}`);
+    return { message: 'Ministérios integrados com sucesso' };
+  }
+
+  async getVolunteersByCell(cellId: string): Promise<CellVolunteersDto[]> {
+    this.logger.debug(`Buscando voluntários da célula ${cellId} na última temporada`);
+
+    // 1. Buscar a última temporada cadastrada
+    const lastSeason = await this.seasonRepository
+      .createQueryBuilder('s')
+      .orderBy('s.dataInicio', 'DESC')
+      .limit(1)
+      .getOne();
+
+    if (!lastSeason) {
+      this.logger.warn('Nenhuma temporada encontrada');
+      throw new NotFoundException('Nenhuma temporada encontrada');
+    }
+
+    this.logger.debug(`Última temporada encontrada: ${lastSeason.id} - ${lastSeason.name}`);
+
+    // 2. Buscar voluntários da temporada com o cell_id especificado
+    const result = await this.volunteersRepository
+      .createQueryBuilder('v')
+      .select('v.id', 'volunteer_id')
+      .addSelect('v.name', 'name')
+      .addSelect('vhs.cell_frequency', 'cell_frequency')
+      .addSelect(`EXTRACT(YEAR FROM AGE(CURRENT_DATE, v.birth_date))`, 'age')
+      .innerJoin('volunteer_history_season', 'vhs', 'v.id = vhs.volunteer_id AND vhs.season_id = :seasonId', { seasonId: lastSeason.id })
+      .where('vhs.cell_id = :cellId', { cellId })
+      .orderBy('v.name', 'ASC')
+      .getRawMany();
+
+    this.logger.debug(`Encontrados ${result.length} voluntários na célula ${cellId} para a temporada ${lastSeason.id}`);
+
+    return result;
+  }
+
+  async getVolunteersBySeason(seasonId: string): Promise<SeasonVolunteersDto[]> {
+    this.logger.debug(`Buscando voluntários da temporada ${seasonId} ordenados por cell_id`);
+
+    // Verificar se season existe
+    const season = await this.seasonRepository.findOne({ where: { id: seasonId } });
+    if (!season) {
+      this.logger.warn(`Temporada ${seasonId} não encontrada`);
+      throw new NotFoundException('Temporada não encontrada');
+    }
+
+    // Buscar voluntários da temporada ordenados por cell_id
+    const result = await this.volunteersRepository
+      .createQueryBuilder('v')
+      .select('v.id', 'volunteer_id')
+      .addSelect('v.name', 'name')
+      .addSelect('vhs.email', 'email')
+      .addSelect('vhs.phone', 'phone')
+      .addSelect('vhs.cell_frequency', 'cell_frequency')
+      .addSelect('vhs.cell_id', 'cell_id')
+      .addSelect('c.name', 'cell_name')
+      .innerJoin('volunteer_history_season', 'vhs', 'v.id = vhs.volunteer_id AND vhs.season_id = :seasonId', { seasonId })
+      .innerJoin('cells', 'c', 'vhs.cell_id = c.id')
+      .orderBy('vhs.cell_id', 'ASC')
+      .addOrderBy('v.name', 'ASC')
+      .getRawMany();
+
+    this.logger.debug(`Encontrados ${result.length} voluntários na temporada ${seasonId}`);
+
     return result;
   }
 }

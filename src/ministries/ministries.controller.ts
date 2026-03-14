@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Param, Post } from '@nestjs/common';
 import { AllowApiKey } from '../auth/api-key-auth.decorator';
 import { MinistriesService } from './ministries.service';
 import { MinistryResponseDto } from './dto/ministry-response.dto';
@@ -13,5 +13,14 @@ export class MinistriesController {
   @AllowApiKey()
   async getActive(): Promise<MinistryResponseDto[]> {
     return this.ministriesService.getActive();
+  }
+
+  @Post(':idMinistry/season/:idSeason/not-registered')
+  async processNotRegisteredVolunteers(
+    @Param('idMinistry') idMinistry: string,
+    @Param('idSeason') idSeason: string,
+  ): Promise<{ message: string }> {
+    const ministryId = parseInt(idMinistry, 10);
+    return this.ministriesService.processNotRegisteredVolunteers(ministryId, idSeason);
   }
 }

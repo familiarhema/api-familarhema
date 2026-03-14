@@ -54,4 +54,12 @@ export class SeasonsController {
   ) {
     return this.seasonsService.updateVolunteerSeason(seasonId, volunteerId, updateDto);
   }
+
+  @Post(':seasonId/ministry/:ministryId/integrate-volunteers')
+  async integrateVolunteersByMinistry(
+    @Param('seasonId') seasonId: string,
+    @Param('ministryId') ministryId: string,
+  ) {
+    return this.seasonsService.integrateVolunteersByMinistry(seasonId, ministryId);
+  }
 }
