@@ -16,6 +16,7 @@ import { VolunteerListResponseDto, VolunteerListItemDto } from './dto/volunteer-
 import { VolunteerStatusQueryDto } from './dto/volunteer-status-query.dto';
 import { CellVolunteersDto } from './dto/cell-volunteers.dto';
 import { SeasonVolunteersDto } from './dto/season-volunteers.dto';
+import { InscriptionCellDto, VolunteerInscriptionStatusDto } from './dto/volunteer-inscription-status.dto';
 
 @Injectable()
 export class VolunteersService {
@@ -47,12 +48,16 @@ export class VolunteersService {
     // 1. Buscar temporada ativa
     const today = new Date();
     this.logger.debug('Buscando temporada ativa para data: ' + today);
-    const season = await this.seasonRepository.findOne({
-      where: [
-        { dataInicio: LessThanOrEqual(today), dataFim: MoreThanOrEqual(today), active : true },
-      ],
-      order: { dataInicio: 'DESC' },
-    });
+    const season = await this.seasonRepository
+      .createQueryBuilder('s')
+      .where('s.data_inicio <= :today', { today })
+      .andWhere('s.active = true')
+      .andWhere(
+        '(s.data_fim_prorrogacao IS NOT NULL AND s.data_fim_prorrogacao >= :today) OR (s.data_fim_prorrogacao IS NULL AND s.data_fim >= :today)',
+        { today }
+      )
+      .orderBy('s.data_inicio', 'DESC')
+      .getOne();
     this.logger.debug('Season encontrada: ' + JSON.stringify(season));
     if (!season) {
       this.logger.warn('Nenhuma temporada ativa encontrada.');
@@ -143,6 +148,7 @@ export class VolunteersService {
               data: {
                 ministerios: ministerios,
                 cell: historySeason?.cell?.name || null,
+                cellId: historySeason?.cell?.id || null,
                 nome: existingVolunteer.name,
                 volunteerId: existingVolunteer.id,
                 seasonId: season.id,
@@ -289,7 +295,7 @@ export class VolunteersService {
         'vhs.cell_name', 'c.name as cell_name_from_id', 'vhs.cell_id','vhs.attendedVolunteersDay',
         'vms.id as ministry_season_id', 'vms.status as ministry_status','vhs.blockedManager','vms.principal',
         'm.id as ministry_id', 'm.name as ministry_name', 'vhs.startServicedAt', 'vhs.reason',
-        'CASE WHEN vhs.startServicedAt IS NULL THEN true ELSE false END AS is_new_volunteer'
+        'vhs.novo_voluntario AS is_new_volunteer'
       ]);
 
     if (filters.nome) {
@@ -314,9 +320,9 @@ export class VolunteersService {
 
     if (filters.voluntarioNovo !== undefined) {
       if (filters.voluntarioNovo) {
-        query.andWhere('vhs.startServicedAt IS NULL');
+        query.andWhere('vhs.novo_voluntario = true');
       } else {
-        query.andWhere('vhs.startServicedAt IS NOT NULL');
+        query.andWhere('vhs.novo_voluntario = false');
       }
     }
 
@@ -536,6 +542,59 @@ export class VolunteersService {
     return { ministerios: ministries };
   }
 
+  async getVolunteerInscriptionStatus(query: VolunteerStatusQueryDto): Promise<VolunteerInscriptionStatusDto> {
+    this.logger.debug(`Buscando status de inscrição do voluntário com email: ${query.email} e telefone: ${query.telefone}`);
+
+    // 1. Buscar temporada ativa
+    const today = new Date();
+    const season = await this.seasonRepository.findOne({
+      where: {
+        dataInicio: LessThanOrEqual(today),
+        dataFim: MoreThanOrEqual(today),
+      },
+    });
+
+    if (!season) {
+      throw new NotFoundException('Nenhuma temporada ativa encontrada');
+    }
+
+    // 2. Buscar registro na volunteer_history_season pela temporada ativa
+    const historySeason = await this.volunteerHistorySeasonRepository.findOne({
+      where: [
+        { season: { id: season.id }, email: query.email },
+        { season: { id: season.id }, phone: query.telefone },
+      ],
+      relations: ['volunteer', 'cell'],
+    });
+
+    if (!historySeason) {
+      throw new NotFoundException('Cadastro de voluntário não encontrado para a temporada ativa');
+    }
+
+    // 3. Buscar todos os ministérios escolhidos na inscrição
+    const ministeriosSeason = await this.volunteerMinistrySeasonRepository.find({
+      where: {
+        volunteer: { id: historySeason.volunteer.id },
+        season: { id: season.id },
+      },
+      relations: ['ministry'],
+    });
+
+    const ministerios = ministeriosSeason.map(ms => ({
+      name: ms.ministry.name,
+      principal: ms.principal,
+    }));
+
+    const celula: InscriptionCellDto = {
+      id: historySeason.cell?.id ?? null,
+      name: historySeason.cell?.name ?? historySeason.cellName ?? '',
+    };
+
+    this.logger.debug(`Status de inscrição encontrado para voluntário ${historySeason.volunteer.id}: ${ministerios.length} ministério(s)`);
+
+    return { ministerios, celula };
+  }
+
   async batchApproveMinistries(seasonId: string, ministryId: string, volunteerIds: string[]): Promise<{ message: string }> {
     
     
@@ -681,7 +740,7 @@ export class VolunteersService {
       .addSelect('vh.phone', 'phone')
       .addSelect('v.birth_date', 'birth_date')
       .addSelect('vh.startServicedAt', 'startServicedAt')
-      .addSelect(`CASE WHEN vh.startServicedAt IS NULL THEN 'Novo' ELSE 'Antigo' END`, 'tipoVoluntario')
+      .addSelect(`CASE WHEN vh.novo_voluntario = true THEN 'Novo' ELSE 'Antigo' END`, 'tipoVoluntario')
       .addSelect('c.name', 'cell_name')
       .innerJoin('volunteer_history_season', 'vh', 'v.id = vh.volunteer_id AND vh.season_id = :seasonId', { seasonId })
       .innerJoin('cells', 'c', 'c.id = vh.cell_id')
@@ -900,13 +959,12 @@ export class VolunteersService {
       throw new BadRequestException('Voluntário não integrado ao PCS ainda.');
     }
 
-    // Buscar ministérios com status 'Accepted' para a temporada
+    // Buscar ministérios com status 'Accepted' ou 'Integrated' para a temporada
     const acceptedMinistries = await this.volunteerMinistrySeasonRepository.find({
-      where: {
-        volunteer: { id: volunteerId },
-        season: { id: seasonId },
-        status: 'Accepted'
-      },
+      where: [
+        { volunteer: { id: volunteerId }, season: { id: seasonId }, status: 'Accepted' },
+        { volunteer: { id: volunteerId }, season: { id: seasonId }, status: 'Integrated' },
+      ],
       relations: ['ministry']
     });
 
@@ -922,8 +980,18 @@ export class VolunteersService {
     // Chamar atualizarMinisterios
     await this.pcsIntegrationService.atualizarMinisterios(volunteer.personId.toString(), ministryIds);
 
-    // Chamar adicionarTemporada
-    await this.pcsIntegrationService.adicionarTemporada(volunteer.personId.toString(), "02/2025");
+    // Chamar adicionarTemporada: buscar e deletar o FieldDatum existente (se houver), depois adicionar
+    const personIdStr = volunteer.personId.toString();
+    const fieldDatumId = await this.pcsIntegrationService.buscarFieldDatumTemporada(personIdStr);
+    if (fieldDatumId) {
+      this.logger.debug(`Deletando FieldDatum de temporada existente: fieldDatumId=${fieldDatumId}, personId=${personIdStr}`);
+      try {
+        await this.pcsIntegrationService.deletarFieldDatum(personIdStr, fieldDatumId);
+      } catch (e) {
+        this.logger.debug(`Erro ao deletar FieldDatum de temporada (ignorado): ${e.message}`);
+      }
+    }
+    await this.pcsIntegrationService.adicionarTemporada(personIdStr, "01/2026");
 
     // Atualizar status para 'Integrated'
     for (const ms of acceptedMinistries) {

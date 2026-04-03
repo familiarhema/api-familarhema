@@ -43,4 +43,7 @@ export class VolunteerHistorySeason {
 
   @Column({ type: 'boolean', default: false })
   attendedVolunteersDay: boolean;
+
+  @Column({ type: 'boolean', default: false, name: 'novo_voluntario' })
+  novo_voluntario: boolean;
 }

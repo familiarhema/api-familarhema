@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
-import { PCSPersonResponse, PCSPersonDTO, PCSFullPersonDTO } from './interfaces/person.interface';
+import { PCSPersonResponse, PCSPersonDTO, PCSFullPersonDTO, PCSServicesPersonDTO } from './interfaces/person.interface';
 import { PCSTagResponse, TagsMinisteriosDTO } from './interfaces/tag.interface';
 import { PCSTeamPeopleResponse } from './interfaces/team.interface';
 
@@ -182,6 +182,83 @@ export class PCSIntegrationService {
       if (error instanceof AxiosError) {
         throw new HttpException(
           error.response?.data?.message || 'Erro ao buscar pessoa completa no PCS',
+          error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      throw error;
+    }
+  }
+
+  async buscarPessoaServices(personId: string): Promise<PCSServicesPersonDTO | null> {
+    try {
+      const url = `${this.baseUrl}/services/v2/people/${personId}`;
+
+      const { data } = await firstValueFrom(
+        this.httpService.get(url, {
+          headers: {
+            Authorization: `Basic ${this.auth}`,
+            Accept: 'application/json',
+          },
+        })
+      );
+
+      if (!data.data) {
+        return null;
+      }
+
+      const person = data.data;
+      const attrs = person.attributes;
+
+      return {
+        id: person.id,
+        first_name: attrs.first_name,
+        last_name: attrs.last_name,
+        full_name: attrs.full_name,
+        birthdate: attrs.birthdate ?? null,
+        status: attrs.status,
+        permissions: attrs.permissions,
+        archived: attrs.archived,
+        archived_at: attrs.archived_at ?? null,
+        photo_url: attrs.photo_url,
+        photo_thumbnail_url: attrs.photo_thumbnail_url,
+        created_at: attrs.created_at,
+        updated_at: attrs.updated_at,
+      };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new HttpException(
+          error.response?.data?.message || 'Erro ao buscar pessoa no PCS Services',
+          error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      throw error;
+    }
+  }
+
+  async desarquivarPessoa(personId: string): Promise<void> {
+    try {
+      const url = `${this.baseUrl}/services/v2/people/${personId}`;
+      const body = {
+        data: {
+          attributes: {
+            permissions: 'Scheduled Viewer',
+          },
+        },
+      };
+
+      await firstValueFrom(
+        this.httpService.patch(url, body, {
+          headers: {
+            Authorization: `Basic ${this.auth}`,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+        })
+      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new HttpException(
+          error.response?.data?.message || 'Erro ao desarquivar pessoa no PCS Services',
           error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
@@ -405,6 +482,102 @@ export class PCSIntegrationService {
     }
   }
 
+  async buscarFieldDatumTemporada(personId: string): Promise<string | null> {
+    try {
+      const url = `${this.baseUrl}/people/v2/people/${personId}/field_data`;
+
+      const { data } = await firstValueFrom(
+        this.httpService.get(url, {
+          headers: {
+            Authorization: `Basic ${this.auth}`,
+            Accept: 'application/json',
+          },
+        })
+      );
+
+      const fieldDatum = (data.data as any[]).find(
+        item =>
+          item.type === 'FieldDatum' &&
+          item.relationships?.field_definition?.data?.id === '956752'
+      );
+
+      return fieldDatum?.id ?? null;
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new HttpException(
+          error.response?.data?.message || 'Erro ao buscar field_data no PCS',
+          error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      throw error;
+    }
+  }
+
+  async deletarFieldDatum(personId: string, fieldDatumId: string): Promise<void> {
+    try {
+      const url = `${this.baseUrl}/people/v2/people/${personId}/field_data/${fieldDatumId}`;
+
+      await firstValueFrom(
+        this.httpService.delete(url, {
+          headers: {
+            Authorization: `Basic ${this.auth}`,
+            Accept: 'application/json',
+          },
+        })
+      );
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new HttpException(
+          error.response?.data?.message || 'Erro ao deletar field_datum no PCS',
+          error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      throw error;
+    }
+  }
+
+  async atualizarTemporada(personId: string, temporada: string): Promise<boolean> {
+    try {
+      const url = `${this.baseUrl}/people/v2/people/${personId}/field_data`;
+      const body = {
+        data: {
+          attributes: {
+            field_definition_id: 956752,
+            value: temporada,
+          },
+          relationships: {
+            field_definition: {
+              data: {
+                type: 'FieldDefinition',
+                id: '956752',
+              },
+            },
+          },
+        },
+      };
+
+      await firstValueFrom(
+        this.httpService.patch(url, body, {
+          headers: {
+            Authorization: `Basic ${this.auth}`,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+        })
+      );
+
+      return true;
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        throw new HttpException(
+          error.response?.data?.message || 'Erro ao atualizar Temporada no PCS',
+          error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      throw error;
+    }
+  }
+
   async atualizarMinisterios(personId: string, ministryIds: string[]): Promise<boolean> {
     try {
       const url = `${this.baseUrl}/services/v2/people/${personId}/assign_tags`;
@@ -449,6 +622,8 @@ export class PCSIntegrationService {
           },
         },
       };
+
+      console.log('Request de atualização de ministérios no PCS:', { personId, ministryIds, body });
 
       await firstValueFrom(
         this.httpService.post(url, body, {

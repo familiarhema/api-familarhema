@@ -35,4 +35,7 @@ export class VolunteerMinistrySeason {
 
   @Column({ type: 'boolean', default: false })
   principal: boolean;
+
+  @Column({ type: 'boolean', default: true, name: 'novo_ministerio' })
+  novo_ministerio: boolean;
 }

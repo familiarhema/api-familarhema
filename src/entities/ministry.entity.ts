@@ -28,4 +28,7 @@ export class Ministry {
 
   @Column({ type: 'varchar', length: 100, nullable: true })
   team_id: string;
+
+  @Column({ type: 'boolean', default: false, name: 'block_new_registration' })
+  block_new_registration: boolean;
 }

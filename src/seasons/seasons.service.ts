@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { SeasonFilterDto } from './dto/season-filter.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual, Not, IsNull } from 'typeorm';
+import { Repository, LessThanOrEqual, MoreThanOrEqual, Not, IsNull, In } from 'typeorm';
 import { Season } from '../entities/season.entity';
 import { Volunteer } from '../entities/volunteer.entity';
 import { Cell } from '../entities/cell.entity';
@@ -50,21 +50,29 @@ export class SeasonsService {
   ) {}
 
   async inscreverSe(seasonId: string, dto: InscreverSeSeasonDto) {
-    // 1. Verificar se a Season está ativa
+    // 1. Buscar temporada respeitando data de prorrogação
     const today = new Date();
-    const season = await this.seasonRepository.findOne({
-      where: {
-        id: seasonId,
-        dataInicio: LessThanOrEqual(today),
-        dataFim: MoreThanOrEqual(today)
-      }
-    });
+    const season = await this.seasonRepository
+      .createQueryBuilder('s')
+      .where('s.id = :seasonId', { seasonId })
+      .andWhere('s.data_inicio <= :today', { today })
+      .andWhere('s.active = true')
+      .andWhere(
+        '(s.data_fim_prorrogacao IS NOT NULL AND s.data_fim_prorrogacao >= :today) OR (s.data_fim_prorrogacao IS NULL AND s.data_fim >= :today)',
+        { today }
+      )
+      .getOne();
 
     if (!season) {
       throw new NotFoundException('Temporada não disponível para inscrição');
     }
 
-    // 2. Verificar se o voluntário existe
+    // 2. Bloquear voluntário novo se a temporada não permite
+    if (season.block_new_volunteer && dto.novo_voluntario) {
+      throw new BadRequestException('Inscrição de novos voluntários não está disponível para esta temporada');
+    }
+
+    // 3. Verificar se o voluntário existe
     const volunteer = await this.volunteerRepository.findOne({
       where: { id: dto.codigo }
     });
@@ -73,7 +81,7 @@ export class SeasonsService {
       throw new NotFoundException('Voluntário não encontrado');
     }
 
-    // 3. Verificar se já está inscrito na season
+    // 4. Verificar se já está inscrito na season
     const jaInscrito = await this.volunteerHistorySeasonRepository.findOne({
       where: {
         volunteer: { id: volunteer.id },
@@ -85,16 +93,12 @@ export class SeasonsService {
       throw new BadRequestException('Voluntário já inscrito nesta temporada');
     }
 
-    // 4. Verificar se a célula existe
+    // 5. Verificar se a célula existe
     const cell = await this.cellRepository.findOne({
       where: { id: dto.celula.codigo }
     });
 
-    // if (!cell) {
-    //   throw new NotFoundException('Célula não encontrada');
-    // }
-
-    // 5. Verificar se os ministérios existem
+    // 6. Verificar se os ministérios existem
     const ministerioPrincipal = await this.ministryRepository.findOne({
       where: { id: dto.ministerioPrincipal }
     });
@@ -113,14 +117,45 @@ export class SeasonsService {
       throw new NotFoundException('Um ou mais ministérios não foram encontrados');
     }
 
-    // 6. Atualizar dados do voluntário se fornecidos
+    // 7. Buscar temporada imediatamente anterior
+    const previousSeason = await this.findPreviousSeason(season.dataInicio);
+
+    // 8. Calcular novo_ministerio e validar block_new_registration por ministério
+    const todosMinisterios = [ministerioPrincipal, ...outrosMinisterios];
+    const novoMinisterioMap = new Map<number, boolean>();
+
+    for (const ministry of todosMinisterios) {
+      let novoMinisterio = true;
+
+      if (!dto.novo_voluntario && previousSeason) {
+        const registroAnterior = await this.volunteerMinistrySeasonRepository.findOne({
+          where: {
+            volunteer: { id: volunteer.id },
+            ministry: { id: ministry.id },
+            season: { id: previousSeason.id },
+            status: In(['Accepted', 'Integrated'])
+          }
+        });
+        novoMinisterio = !registroAnterior;
+      }
+
+      if (ministry.block_new_registration && novoMinisterio) {
+        throw new BadRequestException(
+          `Inscrições no ministério "${ministry.name}" estão restritas a voluntários que já participaram na temporada anterior`
+        );
+      }
+
+      novoMinisterioMap.set(ministry.id, novoMinisterio);
+    }
+
+    // 9. Atualizar dados do voluntário se fornecidos
     if (dto.nomeVoluntario || dto.dataNascimento) {
       if (dto.nomeVoluntario) volunteer.name = dto.nomeVoluntario;
       if (dto.dataNascimento) volunteer.birth_date = dto.dataNascimento;
       await this.volunteerRepository.save(volunteer);
     }
 
-    // 7. Criar registro na volunteer_history_season
+    // 10. Criar registro na volunteer_history_season
     const historySeason = this.volunteerHistorySeasonRepository.create({
       volunteer,
       season,
@@ -128,19 +163,21 @@ export class SeasonsService {
       email: dto.email,
       phone: dto.celular,
       cellName: cell ? null : dto.celula.nome,
-      startServicedAt: dto.sirvoDesde || null
+      startServicedAt: dto.sirvoDesde || null,
+      novo_voluntario: dto.novo_voluntario
     });
 
     await this.volunteerHistorySeasonRepository.save(historySeason);
 
-    // 8. Criar registros na volunteer_ministry_season
+    // 11. Criar registros na volunteer_ministry_season
     const ministrySeasons = [
       this.volunteerMinistrySeasonRepository.create({
         volunteer,
         ministry: ministerioPrincipal,
         season,
         status: 'Created',
-        principal: true
+        principal: true,
+        novo_ministerio: novoMinisterioMap.get(ministerioPrincipal.id)
       }),
       ...outrosMinisterios.map(ministry =>
         this.volunteerMinistrySeasonRepository.create({
@@ -148,7 +185,8 @@ export class SeasonsService {
           ministry,
           season,
           status: 'Created',
-          principal: false
+          principal: false,
+          novo_ministerio: novoMinisterioMap.get(ministry.id)
         })
       )
     ];
@@ -168,6 +206,15 @@ export class SeasonsService {
         }
       }
     };
+  }
+
+  private async findPreviousSeason(currentDataInicio: Date): Promise<Season | null> {
+    return this.seasonRepository
+      .createQueryBuilder('s')
+      .where('s.data_inicio < :currentDataInicio', { currentDataInicio })
+      .orderBy('s.data_inicio', 'DESC')
+      .limit(1)
+      .getOne();
   }
 
   async getVolunteersByMinistry(seasonId: string) {
@@ -207,11 +254,11 @@ export class SeasonsService {
   async getVolunteersNewVsOld(seasonId: string) {
     const result = await this.volunteerHistorySeasonRepository
       .createQueryBuilder('vhs')
-      .select("CASE WHEN vhs.startServicedAt IS NULL THEN 'novo' ELSE 'antigo' END", 'type')
+      .select("CASE WHEN vhs.novo_voluntario = true THEN 'novo' ELSE 'antigo' END", 'type')
       .addSelect('COUNT(DISTINCT vhs.volunteer_id)', 'total')
       .innerJoin('vhs.volunteer', 'v')
       .where('vhs.season_id = :seasonId', { seasonId })
-      .groupBy("CASE WHEN vhs.startServicedAt IS NULL THEN 'novo' ELSE 'antigo' END")
+      .groupBy("CASE WHEN vhs.novo_voluntario = true THEN 'novo' ELSE 'antigo' END")
       .getRawMany();
 
     const response = { novo: 0, antigo: 0 };

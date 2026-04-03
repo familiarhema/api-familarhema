@@ -62,3 +62,19 @@ export interface PCSFullPersonDTO {
   celula: string;
   serveDesde: string;
 }
+
+export interface PCSServicesPersonDTO {
+  id: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  birthdate: string | null;
+  status: string;
+  permissions: string;
+  archived: boolean;
+  archived_at: string | null;
+  photo_url: string;
+  photo_thumbnail_url: string;
+  created_at: string;
+  updated_at: string;
+}

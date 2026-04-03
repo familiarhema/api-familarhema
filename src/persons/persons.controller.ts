@@ -23,6 +23,7 @@ import { ApplicationAuthGuard } from 'src/auth/application-auth.guard';
 export class PersonsController {
   constructor(private readonly personsService: PersonsService) {}
 
+  /** Cria um novo registro de pessoa no sistema. */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@GetUser() user: any, @Body() createPersonDto: CreatePersonDto) {
@@ -30,6 +31,7 @@ export class PersonsController {
     return this.personsService.create(createPersonDto);
   }
 
+  /** Retorna todos os registros de pessoas cadastradas no sistema. */
   @Get()
   @HttpCode(HttpStatus.OK)
   findAll(@GetUser() user: any) {
@@ -37,6 +39,7 @@ export class PersonsController {
     return this.personsService.findAll();
   }
 
+  /** Busca os dados de uma pessoa pelo UUID informado. */
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   findOne(@GetUser() user: any, @Param('id', ParseUUIDPipe) id: string) {
@@ -44,6 +47,7 @@ export class PersonsController {
     return this.personsService.findOne(id);
   }
 
+  /** Atualiza parcialmente os dados de uma pessoa identificada pelo UUID. */
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
   update(
@@ -55,6 +59,7 @@ export class PersonsController {
     return this.personsService.update(id, updatePersonDto);
   }
 
+  /** Remove permanentemente o registro de uma pessoa pelo UUID. */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@GetUser() user: any, @Param('id', ParseUUIDPipe) id: string) {

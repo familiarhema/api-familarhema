@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsEmail, IsString, IsArray, IsNumber, ValidateNested, IsDate, IsOptional, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsEmail, IsString, IsArray, IsNumber, ValidateNested, IsDate, IsOptional, IsUUID, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class CelulaDto {
@@ -50,4 +50,8 @@ export class InscreverSeSeasonDto {
   @IsOptional()
   @IsNumber({}, { message: 'O serviço desde deve ser um número' })
   sirvoDesde?: number;
+
+  @IsNotEmpty({ message: 'O campo novo voluntário é obrigatório' })
+  @IsBoolean({ message: 'O campo novo voluntário deve ser um booleano' })
+  novo_voluntario: boolean;
 }

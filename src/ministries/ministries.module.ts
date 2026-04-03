@@ -8,6 +8,7 @@ import { AuthGuardsModule } from '../auth/auth-guards.module';
 import { PCSModule } from '../integrations/pcs/pcs.module';
 import { Volunteer } from '../entities/volunteer.entity';
 import { VolunteerMinistrySeason } from '../entities/volunteer-ministry-season.entity';
+import { VolunteersModule } from '../volunteers/volunteers.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { VolunteerMinistrySeason } from '../entities/volunteer-ministry-season.e
     ConfigModule,
     AuthGuardsModule,
     PCSModule,
+    VolunteersModule,
   ],
   controllers: [MinistriesController],
   providers: [MinistriesService],
