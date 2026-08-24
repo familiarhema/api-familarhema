@@ -1,22 +1,53 @@
-name: Test SSH connection
+name: Build and deploy API
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  NODE_VERSION: 22
+  RELEASE_NAME: api-familarhema-${{ github.sha }}.tar.gz
+
 jobs:
-  test-ssh:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test -- --runInBand
+
+      - name: Build
+        run: npm run build
+
+      - name: Keep production dependencies only
+        run: npm prune --omit=dev
+
+      - name: Create release package
+        run: tar -czf "$RELEASE_NAME" dist node_modules package.json package-lock.json
+
       - name: Configure SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
-      - name: Test SSH connection
+      - name: Upload release
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -26,25 +57,39 @@ jobs:
             -o ConnectTimeout=10 \
             -o StrictHostKeyChecking=accept-new \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            'printf "SSH connection successful\n"; printf "User: "; whoami; printf "Host: "; hostname; printf "Node: "; node --version 2>/dev/null || printf "not installed\n"'
+            "mkdir -p /tmp/api-familarhema-deploy"
+          scp -o StrictHostKeyChecking=accept-new "$RELEASE_NAME" "$DEPLOY_USER@$DEPLOY_HOST:/tmp/$RELEASE_NAME"
 
-      # Full deployment is intentionally disabled until the SSH credentials are validated.
-      # - name: Setup Node.js
-      #   uses: actions/setup-node@v4
-      #   with:
-      #     node-version: 20
-      #     cache: npm
-      # - name: Install dependencies
-      #   run: npm ci
-      # - name: Test
-      #   run: npm test -- --runInBand
-      # - name: Build
-      #   run: npm run build
-      # - name: Keep production dependencies only
-      #   run: npm prune --omit=dev
-      # - name: Create release package
-      #   run: tar -czf "api-familarhema-${{ github.sha }}.tar.gz" dist node_modules package.json package-lock.json
-      # - name: Upload release
-      #   run: scp ...
-      # - name: Activate release
-      #   run: ssh ...
+      - name: Activate release
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          PM2_APP_NAME: ${{ secrets.PM2_APP_NAME }}
+        run: |
+          ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "RELEASE_NAME='$RELEASE_NAME' DEPLOY_PATH='$DEPLOY_PATH' PM2_APP_NAME='$PM2_APP_NAME' bash -s" <<'REMOTE_SCRIPT'
+          set -eu
+
+          release_dir="$DEPLOY_PATH/releases/${RELEASE_NAME%.tar.gz}"
+          mkdir -p "$release_dir"
+          tar -xzf "/tmp/$RELEASE_NAME" -C "$release_dir"
+
+          # The server-owned .env is never included in or removed with a release.
+          if [ -f "$DEPLOY_PATH/.env" ]; then
+            ln -sfn "$DEPLOY_PATH/.env" "$release_dir/.env"
+          fi
+
+          ln -sfn "$release_dir" "$DEPLOY_PATH/current"
+          cd "$DEPLOY_PATH/current"
+
+          if pm2 describe "$PM2_APP_NAME" >/dev/null 2>&1; then
+            pm2 delete "$PM2_APP_NAME"
+          fi
+          pm2 start dist/main.js --name "$PM2_APP_NAME" --cwd "$DEPLOY_PATH/current"
+          pm2 save
+
+          rm -f "/tmp/$RELEASE_NAME"
+          find "$DEPLOY_PATH/releases" -mindepth 1 -maxdepth 1 -type d ! -path "$release_dir" -exec rm -rf {} +
+          REMOTE_SCRIPT

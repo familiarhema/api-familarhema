@@ -47,25 +47,25 @@ $ npm run start:prod
 
 ## Production deploy
 
-The workflow in `.github/workflows/deploy.yml` is currently configured only to test the SSH connection manually. The build and deployment steps are disabled until the server credentials are validated.
+The workflow in `.github/workflows/deploy.yml` builds the API on GitHub Actions and sends a release with `dist` and production dependencies to the server. It runs on pushes to `main` and can also be started manually. The droplet does not need to compile the project or run `npm install`.
 
 Configure these GitHub repository secrets:
 
 - `DEPLOY_HOST`: server IP or hostname
 - `DEPLOY_USER`: SSH user that owns the application directory
 - `DEPLOY_SSH_PRIVATE_KEY`: private key authorized on the server
-- `DEPLOY_PATH`: application directory, for example `/var/www/api-familarhema`
+- `DEPLOY_PATH`: application directory, for example `/var/www/rhema/api-familarhema`
 - `PM2_APP_NAME`: PM2 process name, for example `api-familarhema`
 
 Run this once on the droplet, using the same Node major version configured in the workflow:
 
 ```bash
 npm install --global pm2
-mkdir --parents /var/www/api-familarhema/releases
+mkdir --parents /var/www/rhema/api-familarhema/releases
 pm2 startup
 ```
 
-Execute the command printed by `pm2 startup` with `sudo`, then ensure `DEPLOY_USER` can write to `/var/www/api-familarhema`. Start the `Test SSH connection` workflow manually from the GitHub Actions tab.
+Execute the command printed by `pm2 startup` with `sudo`, then ensure `DEPLOY_USER` can write to `/var/www/rhema/api-familarhema`. The first deployment starts this API as a new PM2 process; later deployments replace only this process and remove previous releases. Push to `main` to deploy, or start the workflow manually from the GitHub Actions tab.
 
 ## Test
 
