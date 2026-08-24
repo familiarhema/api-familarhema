@@ -46,4 +46,7 @@ export class VolunteerHistorySeason {
 
   @Column({ type: 'boolean', default: false, name: 'novo_voluntario' })
   novo_voluntario: boolean;
+
+  @Column({ type: 'date', array: true, nullable: true, name: 'datas_revo_intense' })
+  datasRevoIntense: string[] | null;
 }

@@ -1,0 +1,50 @@
+name: Test SSH connection
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-ssh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Test SSH connection
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh \
+            -o BatchMode=yes \
+            -o ConnectTimeout=10 \
+            -o StrictHostKeyChecking=accept-new \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            'printf "SSH connection successful\n"; printf "User: "; whoami; printf "Host: "; hostname; printf "Node: "; node --version 2>/dev/null || printf "not installed\n"'
+
+      # Full deployment is intentionally disabled until the SSH credentials are validated.
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: 20
+      #     cache: npm
+      # - name: Install dependencies
+      #   run: npm ci
+      # - name: Test
+      #   run: npm test -- --runInBand
+      # - name: Build
+      #   run: npm run build
+      # - name: Keep production dependencies only
+      #   run: npm prune --omit=dev
+      # - name: Create release package
+      #   run: tar -czf "api-familarhema-${{ github.sha }}.tar.gz" dist node_modules package.json package-lock.json
+      # - name: Upload release
+      #   run: scp ...
+      # - name: Activate release
+      #   run: ssh ...

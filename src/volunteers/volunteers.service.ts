@@ -746,7 +746,7 @@ export class VolunteersService {
       .innerJoin('cells', 'c', 'c.id = vh.cell_id')
       .where(`NOT EXISTS (
         SELECT 1 FROM volunteer_ministry_season vms
-        WHERE vms.status IN ('Created', 'Accepted')
+        WHERE vms.status IN ('Created', 'Accepted', 'Integrated')
         AND v.id = vms.volunteer_id
         AND vms.season_id = :seasonId
       )`)
